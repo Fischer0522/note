@@ -3384,6 +3384,311 @@ class Solution {
 
 ```
 
+## 动态规划
+
+### 斐波那契数列
+
+[剑指 Offer 10- I. 斐波那契数列 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/fei-bo-na-qi-shu-lie-lcof/)
+
+- dp数组的下表以及含义：
+
+  dp[i]为第i个斐波那契数列的值
+
+- 递推公式
+
+  ```java
+  dp[i]=(dp[i-1]+dp[i-2])
+  ```
+
+- 初始化
+
+  ```java
+  dp[0]=0;
+  dp[1]=1;
+  ```
+
+### 爬楼梯
+
+[70. 爬楼梯 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/climbing-stairs/)
+
+- dp数组的下标以及含义：
+
+  dp[i]为到达i台阶的方法的种数
+
+- 递推公式
+
+  ```java
+  dp[i]=dp[i-1]+dp[i-2];
+  ```
+
+- 初始化:n给定的范围为1-45，此处0可以视为地面，到达地面的方法设为1，便于对后面的进行初始化，如2可以从1达到，也可以从地面直接达到
+
+  ```
+  dp[0]=1;
+  dp[1]=1;
+  ```
+
+  **题解**
+
+  ```
+  class Solution {
+      public int climbStairs(int n) {
+          if(n<=1){
+              return n;
+          }
+          int[] dp=new int[n+1];
+          dp[0]=1;
+          dp[1]=1;
+          for(int i=2;i<=n;i++){
+              dp[i]=dp[i-1]+dp[i-2];
+          }
+          return dp[n];
+  
+      }
+  }
+  ```
+
+### 使用最小花费爬楼梯
+
+[746. 使用最小花费爬楼梯 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/min-cost-climbing-stairs/)
+
+- dp数组的下标以及含义：
+
+  到达第i个台阶所需要的花费，值得注意的是，题目中所说的为到达楼梯顶部，即：如果有n个台阶，那么n+1所指的台阶为楼梯顶部
+
+- 递推公式：
+
+  - 可以跨过一个或者两个台阶，那么到达第i个台阶只能从i-1和i-2走过来，在二者中取最小加上第i个台阶的花费即为总的花费
+  - 从该位置向上爬时支付体力值，而最后一步的楼顶为已经到达，因此不需要支付额外的体力值
+
+
+  ```java
+  dp[i]=cost[i]+Math.min(dp[i-1],dp[i-2]);
+  dp[cost.length]=Math.min(dp[cost.length-1],dp[cost.length-2]);
+  
+  ```
+
+- 初始化：
+
+要求到达楼梯顶的花费，因此dp数组的长度为n+1
+
+```java
+int[] dp=new int[cost.length+1];
+        dp[0]=cost[0];
+        dp[1]=cost[1];
+```
+
+**解题过程**
+
+```java
+class Solution {
+    public int minCostClimbingStairs(int[] cost) {
+        int[] dp=new int[cost.length+1];
+        dp[0]=cost[0];
+        dp[1]=cost[1];
+        for(int i=2;i<cost.length;i++){
+            dp[i]=cost[i]+Math.min(dp[i-1],dp[i-2]);
+        }
+        dp[cost.length]=Math.min(dp[cost.length-1],dp[cost.length-2]);
+        return dp[cost.length];
+
+    }
+}
+```
+
+### 不同路径
+
+[62. 不同路径 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/unique-paths/)
+
+- dp数组以及下标的含义：
+
+  dp\[i][j]为到达（i,j)这一点的总路径和
+
+- 递推公式:
+
+  机器人从左上出发抵达右下，因此正常路径的情况下(不往回走，不刻意转圈)，到底该点的只能由其左边或者上边得来，因此有以下递推公式：
+
+  ```java
+   dp[i][j]=dp[i-1][j]+dp[i][j-1];
+  ```
+
+- dp初始化：
+
+  左上两条边界的坐标只能通过直走得到，因此值全为1
+
+  ```java
+  int[][]dp=new int[m][n];
+           for(int i=0;i<m;i++){
+               dp[i][0]=1;
+           }
+           for(int j=0;j<n;j++){
+                   dp[0][j]=1;
+          }
+  ```
+
+- 遍历顺序：
+
+  dp[i][j]都是从其上方和左方推导而来，那么从左上到右下一层一层遍历就可以了。
+
+**完整代码**
+
+```java
+class Solution {
+    public int uniquePaths(int m, int n) {
+        int[][]dp=new int[m][n];
+         for(int i=0;i<m;i++){
+             dp[i][0]=1;
+         }
+         for(int j=0;j<n;j++){
+                 dp[0][j]=1;
+        }
+        for(int i=1;i<m;i++){
+            for(int j=1;j<n;j++){
+                dp[i][j]=dp[i-1][j]+dp[i][j-1];
+            }
+        }
+        return dp[m-1][n-1];
+
+    }
+}
+```
+
+### 不同路径Ⅱ
+
+[63. 不同路径 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/unique-paths-ii/)
+
+- dp数组以及下标的含义：
+
+  dp\[i][j]为到达（i,j)这一点的总路径和
+
+- 递推公式：大致上与不同路径的思路相似，但由于多了障碍物的存在，那么（i,j）只能有从没有障碍物的那一条路走来，而障碍物不可到达，也不可路过，因此dp设置为0，当dp设置为0时，表明无法到达改坐标，相当于把路直接封死
+
+  ```java
+   for(int i=1;i<rows;i++){
+              for(int j=1;j<cols;j++){
+                  if(obstacleGrid[i][j]==1){
+                      dp[i][j]=0;
+                  }
+                  else{
+                      dp[i][j]=dp[i-1][j]+dp[i][j-1];
+                  }
+              }
+          }
+  ```
+
+- 初始化：
+
+  左，上两条路依旧只能走直线到达，但如果改路上存在石头，则被彻底堵死，后面的都无法到达，跳出循环保持为0即可
+
+  ```java
+  		for(int i=0;i<rows;i++){
+              if(obstacleGrid[i][0]==1){
+                  break;
+              }
+              dp[i][0]=1;
+          }
+          for(int j=0;j<cols;j++){
+              if(obstacleGrid[0][j]==1){
+                  break;
+              }
+              dp[0][j]=1;
+          }
+  ```
+
+- 遍历顺序：左上至右下一层一层遍历即可
+
+**完整代码**
+
+```java
+class Solution {
+    public int uniquePathsWithObstacles(int[][] obstacleGrid) {
+        int rows=obstacleGrid.length;
+        int cols=obstacleGrid[0].length;
+        int[][] dp=new int[rows][cols];
+        for(int i=0;i<rows;i++){
+            if(obstacleGrid[i][0]==1){
+                break;
+            }
+            dp[i][0]=1;
+        }
+        for(int j=0;j<cols;j++){
+            if(obstacleGrid[0][j]==1){
+                break;
+            }
+            dp[0][j]=1;
+        }
+        for(int i=1;i<rows;i++){
+            for(int j=1;j<cols;j++){
+                if(obstacleGrid[i][j]==1){
+                    dp[i][j]=0;
+                }
+                else{
+                    dp[i][j]=dp[i-1][j]+dp[i][j-1];
+
+                }
+                
+            }
+        }
+        return dp[rows-1][cols-1];
+
+    }
+}
+```
+
+
+
+ ### 整数拆分
+
+- dp数组以及下标的含义：
+
+  dp[i]：分拆数字i，可以得到的最大乘积为dp[i]。
+
+- 递推公式：
+
+  dp[i]最大乘积得到的方法：
+
+  - j*(i-j)直接相乘
+  - j*dp[i-j],即对i-j再次进行拆分
+
+  在i的一种拆分情况下，我们首先寻求在这种拆分方式下得到的最大值，即为上述两种情况的最大值：`Math.max(j*(i-j),j*dp[(i-j)]`
+
+  除此之外，对于一个i，存在不同种的拆分方式，我们要寻求这些拆分方式中的最大值，因此还要与之前得到的dp[i]去取最大值，最后完整的递推公式如下：
+
+  ```java
+  dp[i]=Math.max(dp[i],Math.max(j*(i-j),j*dp[(i-j)]));
+  ```
+
+- 初始化:
+
+  对于0和1，不存在任何的拆分方式，无论如何初始化解释都比较牵强，并且题目中也限定了n>=2因此，直接从2开始初始化
+  
+- 遍历方式：
+  
+  - 外层遍历为对要拆分的数i进行遍历，以求得最终的n
+  - 内层遍历则为寻求i的不同种拆分方法,由于涉及到对i-j进一步的拆分，因此要从1遍历到i-1，不能只遍历一半
+  
+
+**完整代码**
+
+```java
+class Solution {
+    public int integerBreak(int n) {
+        int[] dp=new int[n+1];
+        dp[2]=1;
+        for(int i=3;i<=n;i++){
+            for(int j=1;i-j>1;j++){
+                dp[i]=Math.max(dp[i],Math.max(j*(i-j),j*dp[(i-j)]));
+            }
+        }
+        return dp[n];
+
+    }
+}
+```
+
+
+
+  
 
 
 
