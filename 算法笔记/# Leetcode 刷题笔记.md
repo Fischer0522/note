@@ -3688,7 +3688,57 @@ class Solution {
 
 
 
-  
+ ### 分割等和子集
+
+ [416. 分割等和子集 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/partition-equal-subset-sum/)
+
+背包经典问题，使得两个子集的元素和相等几位在所有的nums中选择一定的数，使其和为sum/2，转化为背包问题：
+
+- 背包大小：sum/2
+- 背包中放入的元素：重量为nums[i]，价值也为nums[i]
+- 如果背包装满，则代表找到了和为sum的子集合
+- 不可重复放入，为01背包
+
+直接套用背包公式即可：
+
+```java
+class Solution {
+    public boolean canPartition(int[] nums) {
+        int sum=0;
+        for(int i=0;i<nums. length;i++){
+            sum+=nums[i];
+        }
+        if(sum%2==1){
+            return false;
+        }
+        int target=sum/2;
+        int[][] dp=new int[nums.length][target+1];
+        for(int i=0;i<=target;i++){
+            if(i>=nums[0]){
+                dp[0][i]=nums[0];//对放置第一个元素时进行初始化，如果能放得下第一个元素，则将其装入背包当中
+            }
+            
+        }
+        for(int i=1;i<nums.length;i++){
+            for(int j=0;j<=target;j++){
+                if (j >= nums[i]) {
+                    //背包能放得下当前元素：比较将nums[i]置换进去和不做变化的两种情况，
+                    //找到背包容量回退到j-nums[i]的时刻，在保证重量最大的同时为nums[i]留出空间
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i - 1][j - nums[i]] + nums[i]);
+                } else {
+                    //放不下，则直接与上一步保留一致，由于存在j-nums[i]<0的问题，导致超出索引范围，因此特别分情况进行判断
+                    dp[i][j] = dp[i - 1][j];
+                }
+            }
+        }
+        //背包装满时的结果和预期的结果进行比较
+        return dp[nums.length-1][target]==target;
+
+    }
+}
+```
+
+
 
 
 
