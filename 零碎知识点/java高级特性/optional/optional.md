@@ -62,9 +62,46 @@ public String getName(User user){
 							.map(u -> u.name)
 							.orElse("Unknown");
 }
+
+
 ```
 
+- 源代码：
+
+  ```java
+  @GetMapping
+      public ResponseEntity currentUser(@RequestHeader(value = "token")String token){
+          Optional<String> subFromToken = jwtService.getSubFromToken(token);
+          if(subFromToken.isPresent()){
+              String id=subFromToken.get();
+              UserData userData = userQueryService.finById(id).get();
+              return ResponseEntity
+                      .ok(userResponse(new UserWithToken(userData,token)));
+          }
+          else{
+              throw new BizException(HttpStatus.UNAUTHORIZED,"token解析失败");
+          }
+  
+      }
+  ```
+
+  
+
+- 改造后：
+
+  ```java
+  @GetMapping
+      public ResponseEntity currentUser(@RequestHeader(value = "token")String token){
+          String id = jwtService.getSubFromToken(token)
+                  .orElseThrow(()->new BizException(HttpStatus.UNAUTHORIZED,"token解析失败"));
+              UserData userData = userQueryService.finById(id).get();
+              return ResponseEntity
+                      .ok(userResponse(new UserWithToken(userData,token)));
+  
+      }
 ## 开发中的应用
+
+
 
 - 将实体类转化为optional，用于查询过程中避免空指针
 
@@ -87,6 +124,55 @@ public Optional<Article> findById(String id) {
       return Optional.of(articleData);
     }
   }
+```
+
+
+
+在Repository层使用Optional包装查询结果：
+
+```java
+ @Override
+    public Optional<Article> findBySlug(String slug) {
+        Article article=new Article();
+        article.setSlug(slug);
+        QueryWrapper<Article> wrapper=new QueryWrapper<>(article);
+        Article article1=articleDao.selectOne(wrapper);
+        if(article1==null){
+            throw new BizException(HttpStatus.NOT_FOUND,"资源请求失败，要操作的文章可能已经不存在");
+        }
+ 
+        ArticleTagRelation articleTagRelation=new ArticleTagRelation();
+        articleTagRelation.setArticleId(article1.getId());
+        QueryWrapper<ArticleTagRelation>wrapper1=new QueryWrapper<>(articleTagRelation);
+        List<String> tagIds=new LinkedList<>();
+        for (ArticleTagRelation tagRelation : articleTagRelationDao.selectList(wrapper1)) {
+            tagIds.add(tagRelation.getTagId());
+        }
+        if(!tagIds.isEmpty())
+        {
+            List<Tag> tags = tagDao.selectBatchIds(tagIds);
+            article1.setTags(tags);
+        }
+
+        return Optional.ofNullable(article1);
+    }
+
+
+```
+
+注：如果不是在下方添加Tag信息是使用到了article1，此处无需对空指针额外进行处理，而在此处，直接使用ofNullable将结果进行返回，此后的空指针问题便可以交给Service层取进行处理
+
+在Service层使用`orElseThrow`方法，如果查询到则可以仅需进行链式处理，或者直接返回实体类形式的结果，如查询不到，则抛出指定的异常(Lambda表达式形式)
+
+```java
+ @DeleteMapping(path = "{id}")
+    public ResponseEntity deleteComment(
+            @PathVariable("slug") String slug,
+            @PathVariable("id") String commentId,
+            @RequestHeader(value = "token")String token){
+        User user = jwtService.toUser(token).get();
+        //此处直接使用实体类Article进行接收
+        Article article = articleRepository.findBySlug(slug).orElseThrow(()->new BizException(HttpStatus.NOT_FOUND,"该评论所属的文章已经不存在"));
 ```
 
 
