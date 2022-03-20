@@ -228,8 +228,46 @@ public class UserApi {
   }
   ```
 
-  @Constraint指定提供逻辑验证的类
+  
 
+- @Constraint指定提供逻辑验证的类
+
+- 元注解：包括@Retention、@Target、@Document、@Inherited四种。
+
+  - @Retention：指明在什么级别显示此注解
+    -  @Retention(RetentionPolicy.SOURCE)  // 注解仅存在于源码中，在class字节码文件中不包含	
+    - @Retention(RetentionPolicy.CLASS)   // 默认的保留策略，注解会在class字节码文件中存在，但运行时无法获得
+    -   @Retention(RetentionPolicy.RUNTIME)  // 注解会在class字节码文件中存在，在运行时可以通过反射获取到
+
+  - @Target：
+
+    指定作用目标，可以传入一个值，也可传入一个数组指定多个目标，主要有以下几种：
+
+    > ElementType.TYPE 用于类，接口，枚举但不能是注解
+    >
+    > ElementType.FIELD 作用于字段，包含枚举值
+    >
+    > ElementType.METHOD 作用于方法，不包含构造方法
+    >
+    > ElementType.PARAMETER 作用于方法的参数
+    >
+    > ElementType.CONSTRUCTOR 作用于构造方法
+    >
+    > ElementType.LOCAL_VERIABLE 作用于本地变量或者catch语句
+    >
+    > ElementType.ANNOTATION_TYPE 作用于注解
+    >
+    > ElementType.PACKAGE 作用于包
+
+  - @Documented：
+
+    指明拥有这个注解的元素可以被javadoc此类的工具文档化。这种类型应该用于注解那些影响客户使用带注释的元素声明的类型。
+    
+  - @Inherited：
+
+    指明该注解类型被自动继承。如果用户在当前类中查询这个元注解类型并且当前类的声明中不包含这个元注解类型，那么也将自动查询当前类的父类是否存在Inherited元注解，这个动作将被重复执行知道这个标注类型被找到，或者是查询到顶层的父类。
+
+- 内部信息
   - message定制化的提示信息，主要是从ValidationMessages.properties里提取，也可以依据实际情况进行定制
   - groups 这里主要进行将validator进行分类，不同的类group中会执行不同的validator操作
   - payload 主要是针对bean的，使用不多。
@@ -257,4 +295,6 @@ public class UserApi {
 ---
 
 参考：[这么写参数校验(validator)就不会被劝退了~ - 掘金 (juejin.cn)](https://juejin.cn/post/6844903902811275278)
+
+[java自定义注解的使用（校验） - 呱呱的呱呱 - 博客园 (cnblogs.com)](https://www.cnblogs.com/guagua-join-1/p/10270350.html)
 
