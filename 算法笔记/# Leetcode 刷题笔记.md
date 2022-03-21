@@ -3846,7 +3846,101 @@ dp:
 
   与一般背包问题保持一致即可，先背后后物品
 
-  ![494.目标和](D:\ProgramResp\GithubRepository\note-master\算法笔记\# Leetcode 刷题笔记.assets\20210125120743274.jpg)
+  ![494.目标和](# Leetcode 刷题笔记.assets/20210125120743274.jpg)
+
+### 一和零
+
+[474. 一和零 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/ones-and-zeroes/)
+
+此题较为特殊的为背包的容量有两个维度，分别为0的数量和1的数量，即为m和n
+
+  dp：
+
+- dp数组的下标以及含义：
+
+  dp\[i][j]:最多有i个1和j个0dd1子集的大小为dp\[i][j]
+
+- 递推公式：
+
+  再次明确定义dp\[i][j]代表的时子集大小，因此在遍历值当前字符串时，只需要再计算完上一个字符串的结果下+1即可，而上一个字符串的结果可以通过遍历至当前字符串的dp减去当前字符串中的1和0得到，有：
+
+  ```java
+  dp[i][j]=dp[i-zeroNum][j-oneNum]+1
+  ```
+
+  而在遍历过程中取最大值，则有：
+
+  ```java
+  dp[i][j]=Math.max(dp[i-zeroNum][j-oneNum]+1,dp[i][j])
+  ```
+
+  
+
+-  dp的初始化：
+
+  - dp\[0][0]毋庸置疑为0
+  - dp\[0][j]
+
+### 零钱兑换Ⅱ
+
+[518. 零钱兑换 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/coin-change-2/)
+
+每种硬币的数额不限，因此为完全背包
+
+背包参数：
+
+- 背包容量：amount
+- 背包中的元素，weight=value=coins[i]
+
+dp：
+
+- dp数组的下标以及含义：
+
+  dp[j]:总金额为j的零钱组合数为dp[j]
+
+- 递推公式：
+
+  由于不考虑排序问题，因此在遍历到coins[i]时，只需要将coins[i]加入其中，因此dp[j]=dp[j-coins[i]],统计不同的coins[i]即可，因此遍历coins[i]统计所有的可能进行累加即可，与目标和的做法完全一致，可得公式：
+
+  ```java
+  dp[j] += dp[j - coins[i]];
+  ```
+
+- 初始化：凑成总金额0的货币组合数为1，dp[0]=1
+
+- 遍历顺序：
+
+  按背包的正常遍历顺序，先遍历背包容量再遍历物品即可，但是由于为完全背包，因此遍历背包容量时需不断覆盖，因此为正序遍历
+
+  ```java
+  for (int i = 0; i < coins.size(); i++) { // 遍历物品
+      for (int j = coins[i]; j <= amount; j++) { // 遍历背包容量
+          dp[j] += dp[j - coins[i]];
+      }
+  }
+  ```
+
+完整代码：
+
+```java
+class Solution {
+    public int change(int amount, int[] coins) {
+        int[] dp=new int[amount+1];
+        dp[0]=1;
+        for(int i=0;i<coins.length;i++){
+            for(int j=coins[i];j<=amount;j++){
+                dp[j]+=dp[j-coins[i]];
+            }
+        }
+        return dp[amount];
+       
+    }   
+}
+```
+
+
+
+  
 
 ---
 ## 存疑
