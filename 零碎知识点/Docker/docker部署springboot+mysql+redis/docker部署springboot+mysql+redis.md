@@ -99,7 +99,8 @@ docker run -id \
 -v $PWD/logs:/logs \
 -v $PWD/data:/var/lib/mysql \
 -e MYSQL_ROOT_PASSWORD=123456 \
-mysql:5.7
+mysql5.7_utf8mb4
+
 ```
 
 - 参数说明：
@@ -311,15 +312,23 @@ redis-cli.exe -h 42.192.180.126 -p 6379
 FROM java:8
 COPY *.jar /app.jar
 
-CMD["--server.port=8080"]
+CMD ["--server.port=8080"]
+
+#定义时区参数
+ENV TZ=Asia/Shanghai
+
+#设置时区
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo '$TZ' > /etc/timezone
 
 EXPOSE 8080
 
 ENTRYPOINT ["java","-jar","/app.jar"]
+
 ```
 
 - 依托于父镜像java8，可提前使用docker pull进行下载，不提前下载也会自动下载
 - 将同目录下所有的jar包用于构建镜像
+- docker默认使用的为UTC时区，会和本地差8小时，并且由于docker的隔离性，单独对宿主机设置时间并无效果，因此需要在dockerFile中设置相应的时区
 - 暴露8080端口用于访问
 - 运行java -jar
 
@@ -344,8 +353,12 @@ demo为名字
 运行：
 
 ```
-docker run -d -p 9000:8080 --link c_mysql --link c_redis --name blogdemo1 blogdemo1
+docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --name blogdemo1 blogdemo1 
 ```
+
+- -p指定端口映射
+- --link使该容器与redis和mysql相连
+- -v 挂载数据卷，将上传的图片保存到宿主机当中
 
 运行该容器并且与mysql和redis容器通过`--link`命令进行互联，至此，容器已经可以成功运行
 

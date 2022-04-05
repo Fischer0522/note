@@ -126,7 +126,22 @@ public Optional<Article> findById(String id) {
   }
 ```
 
+- 在更新用户信息时进行数据重复的校验
 
+  其中findByEmail查询的结果的返回形式为Optional，
+
+  如果查询结果为null，那么直接走orElse，得到结果为true
+
+  如果查询结果不为null，则为按照map中的判断形式得到一个boolean，由于一定会得到一个boolean，因此不会走orElse，直接将得到的boolean交给isEmailVaild
+
+  ```java
+  boolean isEmailValid =
+                  userRepository.findByEmail(inputEmail)
+                          .map(user -> user.equals(targetUser))
+                          .orElse(true);
+  ```
+
+  
 
 在Repository层使用Optional包装查询结果：
 
