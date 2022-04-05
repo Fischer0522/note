@@ -608,6 +608,19 @@ public class Myfilter extends OncePerRequestFilter {
 
 主要针对未认证和未授权两种状态，但是似乎springsecurity默认返回的响应码全为403，有待后续测试
 
+**AuthenticationEntryPoint**
+
+AuthenticationEntryPoint 是 Spring Security Web 一个概念模型接口，顾名思义，他所建模的概念是：“认证入口点”。
+它在用户请求处理过程中遇到认证异常时，被 ExceptionTranslationFilter 用于开启特定认证方案 (authentication schema) 的认证流程。
+
+这里参数 `request `是遇到了认证异常 `authException `用户请求，`response `是将要返回给客户的相应，方法 `commence `实现，也就是相应的认证方案逻辑会修改 `response `并返回给用户引导用户进入认证流程。
+
+**AccessDeniedHandler**
+
+AccessDeniedHandler 仅适用于已通过身份验证的用户。未经身份验证的用户的默认行为是重定向到登录页面（或适用于正在使用的身份验证机制的任何内容）。
+
+而二者失败时返回的状态码似乎均为403，并不是像网上搜到的那样，只要是403就是用AccessDeniedHandler进行处理，被CSDN上的部分文章坑了好久
+
 定义两个实现类：
 
 **AccessDeniedHandlerImpl**
