@@ -173,13 +173,116 @@ docker run -p 6379:6379 --name c_redis --privileged=true -v /root/app/redis/redi
 redis-cli.exe -h 42.192.180.126 -p 6379
 ```
 
-此处使用RDM添加键进行测试不知为何没有效果，最后仍采用redis-cli进行操作测试
+### Mongodb
+
+**下拉镜像：**
 
 ```shell
-
+docker pull mongodb:latest
 ```
 
+**启动镜像：**
 
+```
+docker run -itd --name c_mongo -p 27017:27017 -v /mongodb/data/db:/data/db mongo:latest --auth
+```
+
+> -v：数据卷
+>
+> -p：端口映射
+>
+> --auth：授权参数
+
+mongodb如果不进行密码的设置，此时便可以创建数据库进行连接了，但是这样所有人都可以连接你的数据库，
+
+mongodb与mysql最大的不同是mongodb的每个数据库都有对应的用户，因此并不能像菜鸟教程上面那样只创建一个admin用户就与其进行连接，正确的做法是先创建admin用户和root用户，一个用于管理账户，一个用于管理数据库，最后在创建自己所用的数据库和管理该数据库的用户，再与该用户进行连接
+
+==具体操作过程如下：==
+
+**mongodb密码设置：**
+
+1. 查看所有数据库(mongdb新版本没有admin数据库，但是不影响操作)
+
+   ```
+   show dbs
+   ```
+
+2. 进入admin数据库
+
+   ```
+   use admin
+   ```
+
+3. 创建管理员账户
+
+   ```
+   db.createUser({ user: "admin", pwd: "password", roles: [{ role: "userAdminAnyDatabase", db: "admin" }] })
+   ```
+
+4. mongodb中的用户是基于身份role的，该管理员账户的 role是 userAdminAnyDatabase。admin用户用于管理账号，不能进行关闭数据库等操作。
+
+   ```
+   db.createUser({user: "root",pwd: "password", roles: [ { role: "root", db: "admin" } ]})
+   ```
+
+   创建完admin管理员，创建一个超级管理员root。角色：root。root角色用于关闭数据库。
+
+5. 创建用户自己的数据库的管理角色
+
+   ```
+   use yourdatabse
+   ```
+
+   ```
+   db.createUser({user: "user",pwd: "password",roles: [ { role: "dbOwner", db: "yourdatabase" } ]})
+   ```
+
+   role: "dbOwner"代表数据库所有者角色，拥有最高该数据库最高权限。比如新建索引等当账号管理员和超级管理员，可以为自己的数据库创建用户了。（坑）这时候一定，一定要切换到所在数据库上去创建用户，不然创建的用户还是属于admin。
+
+6. 查看用户
+
+   ```
+   show users
+   ```
+
+7. 删除用户
+
+   删除用户必须有账号管理员来删，所有必须要切换到admin角色
+
+   ```
+   use admin
+   db.auth("admin","password")
+   ```
+
+   删除单个用户
+
+   ```
+   db.system.users.remove({user:"XXXXXX"})
+   ```
+
+   删除所有用户
+
+   ```
+   db.system.users.remove({})
+   ```
+
+在操作的过程中，如果提示没有权限那么直接使用`db.auth("user","password")`授权一次即可
+
+![image-20220407201213107](docker部署springboot+mysql+redis.assets/image-20220407201213107.png)
+
+如果提示`logical sessions can't have multiple authenticated users`,mongodb不允许一次会话认证多个用户，不能重复认证的话那么重启一下shell即可，再次认证便可以认证成功
+
+**之后便可以在springboot中配置进行连接**
+
+```yaml
+data:
+    mongodb:
+      uri: mongodb://username:password@ip:port/database
+```
+
+如果将用户名，密码等单独进行单独配置的话，mongodb会将其按照字符数组处理，因此纯数字的密码一定要加括号使用字符串的形式，
+
+在navicat中连接同样需要指定用户名，密码，ip，端口，数据库
 
 ## 项目部署
 
@@ -353,7 +456,7 @@ demo为名字
 运行：
 
 ```
-docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --name blogdemo1 blogdemo1 
+docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --link c_mongo --name blogdemo1 blogdemo1 
 ```
 
 - -p指定端口映射
