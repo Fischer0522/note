@@ -499,6 +499,39 @@ class Solution {
 ```
 ---
 
+### 存在重复元素
+
+两个下标之差的绝对值<=k,因此维护一个长度为k滑动窗口，每次重新添加时判断该窗口中是否又重复的值即可，使用集合便可以较为轻松的实现
+
+- 窗口内为[i,j]范围的元素
+- 每次添加元素时移动窗口的起始位置
+- 每次长度超出k后移动，即为长度到达k后，添加元素时移动窗口的终止位置，当窗口的长度到达k之后，窗口的长度不再变化，添加一个便移除一个
+
+```java
+class Solution {
+    public boolean containsNearbyDuplicate(int[] nums, int k) {
+        int left=0;
+        Set<Integer> set=new HashSet<>();
+        for(int right=0;right<nums.length;right++){
+            if(right-left>k){
+                set.remove(nums[left]);
+                left++;
+            }
+            if(!set.add(nums[right])){
+                //内有重复元素添加不成功
+                return true;
+            }
+        }
+        return false;
+
+    }
+}
+```
+
+
+
+
+
 ### 长度最小的子数组
 
 [209. 长度最小的子数组 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/minimum-size-subarray-sum/)
@@ -518,28 +551,25 @@ sum即为窗口之中所有元素之和
 ```java
 class Solution {
     public int minSubArrayLen(int target, int[] nums) {
+        int left=0;
+        int right=0;
         int n=nums.length;
-        int sta=0;
-        int minLen=100000;
         int sum=0;
+        int minLen=100000;
         int count=0;
-        for(int i=0;i<n;i++)
-        {
-            sum+=nums[i];
-            while(sum>=target)
-            {
-                count=i-sta+1;
-                if(count<minLen)
-                {
+        for(right=0;right<n;right++){
+            sum+=nums[right];
+            while(sum>=target){
+                count=right-left+1;
+                if(count<minLen){
                     minLen=count;
                 }
-                sum-=nums[sta];
-                sta++;
-
+                sum-=nums[left];
+                left++;
+                
             }
-            
         }
-        if(minLen==100000)return 0;
+        if(minLen==100000) return 0;
         else return minLen;
 
     }
@@ -550,56 +580,81 @@ class Solution {
 
 [904. 水果成篮 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/fruit-into-baskets/)
 
-
 #### 哈希表+滑动窗口
-- 经典滑动窗口
-- 通过哈希表来配合统计篮子中该种水果的数量,该水果数量清零时将该水果从篮子中彻底清除
-- 窗口移动为跨过该颗树,并非删除一种水果
+
+- **哈希表+滑动窗口**
+
+  此题需要同时兼顾一共连续采摘了几棵树和篮子中的水果种类为两种，因此无法像之前的题那样仅使用使用一个常量来进行维护，便需要借助哈希表：
+
+  - HashMap的size即为篮子的大小，最多只能放两种水果，大小为2
+  - key代表了水果的种类
+  - value为该种水果已经连续采摘了几棵树
+
+  滑动窗口：
+
+  - 窗口中的元素为当前已经被采摘，并且水果存在于篮子中的水果数
+  - 起始位置right随着遍历不断向右移动
+  - 终止位置left在篮子中水果超过两种时，即哈希表的size>2时向前移动，扔出**一种**水果
+
+  虽然当篮子中水果数量>2后要删除一种水果，我们想要获得的为连续采摘的树的数量，但是由于水果都为不同种交替种植，因此想要移除一种水果也会误伤到另一种水果。
+
+  只能不断让终止位置left右移跨过树，并且把篮子中该树对应的水果移除，因此像下面这种直接删除该种水果并且进行一次性的跨过多个树的做法是错误的，只能通过循环一个个树的跨越并删除
+
+  错误做法：
+
+  ```Java
+   Integer temp=basket.getOrDefault(fruits[right],0);
+             temp++;
+             basket.put(fruits[right],temp);
+             len++;
+             if(basket.size()>2){
+                 Integer temp1=basket.get(fruits[left]);
+                 
+                     basket.remove(fruits[left]);
+                     
+                 left+=temp1;
+                  len-=temp1;
+             }
+  ```
+
+  
 
 
 ```java
 class Solution {
     public int totalFruit(int[] fruits) {
-       Map<Integer,Integer> basket=new HashMap<>();
-       int result=0;
-       int len=0;
-       int left=0;
-       for(int i=0;i<fruits.length;i++)
-       {
-           if(!basket.containsKey(fruits[i]))
-           {
-               basket.put(fruits[i],1);
-           }
-           else
-           {
-               Integer temp=basket.get(fruits[i]);
-               temp++;
-               basket.put(fruits[i],temp);  
-           }
-           len++;
-           while(basket.size()>2)
-           {
-               int temp1=basket.get(fruits[left]);
+        Map<Integer,Integer> basket=new HashMap<>();
+        int left=0;//终止位置
+        int len=0;//当前最多连续采摘数
+        int result=0;//全局最多连续采摘数
+        for(int right=0;right<fruits.length;right++){
+        //如果如果篮子中有该种水果，则对其进行+1
+        //如果篮子中无该种水果，则初始值为0，+1后放入
+           Integer temp=basket.getOrDefault(fruits[right],0);
+           temp++;
+           basket.put(fruits[right],temp);
+           len++;//采摘了一棵树后连续采摘数+1
+           while(basket.size()>2){
+           //篮子中水果的数量超出2后，篮子中删除一种水果，left前移更新，跨过被移除的水果对应的树
+               Integer temp1=basket.get(fruits[left]);
                temp1--;
-               
-               if(temp1==0)
-               {
-                   basket.remove(fruits[left]);
-               }
-               else
-               {
+               if(temp1>0){
                    basket.put(fruits[left],temp1);
                }
+               else{
+                   basket.remove(fruits[left]);
+                   
+               }
                left++;
-               len--;
-               
+                len--;
            }
-           if (result < len) {
+           if(len>result){
                result=len;
-            }
+           }
+           
+        }
+        return result;
 
-       }
-       return result;
 
     }
 }
@@ -3688,259 +3743,330 @@ class Solution {
 
 
 
- ### 分割等和子集
+  ### 打家劫舍
 
- [416. 分割等和子集 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/partition-equal-subset-sum/)
+[198. 打家劫舍 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/house-robber/)
 
-背包经典问题，使得两个子集的元素和相等几位在所有的nums中选择一定的数，使其和为sum/2，转化为背包问题：
+> - dp[i]以及下标的含义：
+>
+>   dp[i]为到了第i家能偷到的最大金额
+>
+> - 递推公式：
+>
+>   - 到了第i家时，如果选择偷，那么第i-1家一定没偷则`dp[i]=dp[i-2]+nums[i]`
+>   - 如果不偷第i家，那么偷到的金额与上一家保持不变，则有`dp[i]=dp[i-1]`
+>
+>   综上取最大值即可：
+>
+>   ```java
+>   dp[i]=Math.max(dp[i-2]+nums[i],dp[i-1]);
+>   
+>   ```
+>
+> - dp数组的初始化：
+>
+>   dp[0]毫无疑问为nums[0]，但是dp[1]可以选择不偷第0家从第1家开始偷，或者偷了第0家那么第一家就不能偷
+>
+>   ```java
+>   dp[0]=nums[0];
+>   dp[1]=Math.max(nums[0],nums[1]);
+>   ```
+>
+> - 遍历方式：从第0家开始偷，偷到最后一家即可
 
-- 背包大小：sum/2
-- 背包中放入的元素：重量为nums[i]，价值也为nums[i]
-- 如果背包装满，则代表找到了和为sum的子集合
-- 不可重复放入，为01背包
-
-直接套用背包公式即可：
+**总代码：**
 
 ```java
 class Solution {
-    public boolean canPartition(int[] nums) {
-        int sum=0;
-        for(int i=0;i<nums. length;i++){
-            sum+=nums[i];
+    public int rob(int[] nums) {
+        if(nums.length==1){
+            return nums[0];
         }
-        if(sum%2==1){
-            return false;
+        int[] dp=new int[nums.length];
+        dp[0]=nums[0];
+        dp[1]=Math.max(nums[0],nums[1]);
+        for(int i=2;i<nums.length;i++){
+            dp[i]=Math.max(dp[i-2]+nums[i],dp[i-1]);
         }
-        int target=sum/2;
-        int[][] dp=new int[nums.length][target+1];
-        for(int i=0;i<=target;i++){
-            if(i>=nums[0]){
-                dp[0][i]=nums[0];//对放置第一个元素时进行初始化，如果能放得下第一个元素，则将其装入背包当中
-            }
-            
-        }
-        for(int i=1;i<nums.length;i++){
-            for(int j=0;j<=target;j++){
-                if (j >= nums[i]) {
-                    //背包能放得下当前元素：比较将nums[i]置换进去和不做变化的两种情况，
-                    //找到背包容量回退到j-nums[i]的时刻，在保证重量最大的同时为nums[i]留出空间
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i - 1][j - nums[i]] + nums[i]);
-                } else {
-                    //放不下，则直接与上一步保留一致，由于存在j-nums[i]<0的问题，导致超出索引范围，因此特别分情况进行判断
-                    dp[i][j] = dp[i - 1][j];
-                }
-            }
-        }
-        //背包装满时的结果和预期的结果进行比较
-        return dp[nums.length-1][target]==target;
+        return Math.max(dp[nums.length-1],dp[nums.length-2]);
 
     }
 }
 ```
 
-### 最后一块石头的重量Ⅱ
+### 打家劫舍Ⅱ
 
-[1049. 最后一块石头的重量 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/last-stone-weight-ii/)
+[213. 打家劫舍 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/house-robber-ii/)
 
-分割等和子集的条件拓展版，只需要对拆分的结果进行判断，计算得到重量
+- 由于围成了一个环，所以头部和尾部则不能同时偷取，或者说不能够同时考虑是否进行偷取，如果同时考虑，则有可能一起偷，从而触发警报，因此分为两种情况考虑：遍历范围分别为：
 
-石头碰撞后的剩余石头依然能够继续参与到之后的碰撞当中，因此石头的每一个重量都参与到了碰撞当中
+  - 考虑头部不考虑尾部` int result1=robRange(nums,0,nums.length-2);`
+  - 考虑尾部不考虑头部`int result2=robRange(nums,1,nums.length-1);`
 
-因此不妨将两两对撞的石头当作一个整体，即为将石头分为两个重量接近的子序列，求得的重量之差即为最终答案
+  这里的考虑指的是把头部/尾部视为可偷的范围内，但根据实际情况来计算扔可能不偷，因此还有一种头部和尾部都不考虑的情况包含了在上述两种情况当中，无需额外进行计算
 
-此外值得注意的是
-
-- 拆为两个子集合并不代表石头的总重量为偶数最后就能平均拆分
-- 两个子集合的差可以转为一个子集合与平均值的差的两倍
-
-背包参数：
-
-- 背包的容量：target=sum/2， 用于计算一个子集合与其的差得到结果
-- 背包中放入的元素：stones[i]，weight和value均为stones[i]
-- 当背包无法再装入任何一块石头时(但此时背包不一定为满)，即得到了一个最接近target的子集合
-
-套用背包模板的完整代码：
+  其他情况均与打家劫舍Ⅰ一致，不过多赘述，给出完整代码
 
 ```java
 class Solution {
-    public int lastStoneWeightII(int[] stones) {
-        int[][] dp=new int[stones.length][15001];
-        int sum=0;
-        for(int stone:stones){
-            sum+=stone;
+    public int rob(int[] nums) {
+        if(nums.length==0) return 0;
+        if(nums.length==1) return nums[0];
+        int result1=robRange(nums,0,nums.length-2);
+        int result2=robRange(nums,1,nums.length-1);
+        return Math.max(result1,result2);
+       
+    }
+    public int robRange(int [] nums,int start,int end){
+        if (end == start) return nums[start];
+        int[] dp=new int[nums.length];
+        dp[start]=nums[start];
+        dp[start+1]=Math.max(nums[start],nums[start+1]);
+        for(int i=start+2;i<=end;i++){
+            dp[i]=Math.max(dp[i-1],dp[i-2]+nums[i]);
         }
-        
-        int target=sum/2;
-        for (int j = stones[0]; j <= target; j++) {
-            dp[0][j] = stones[0];
-        }
-        for(int i=1;i<stones.length;i++){
-            for(int j=0;j<=target;j++){
-                if(stones[i]>j){
-                    dp[i][j]=dp[i-1][j];
-                }
-                else{
-                    dp[i][j]=Math.max(dp[i-1][j],dp[i-1][j-stones[i]]+stones[i]);
-                }
-            }
-        }
-        return sum-2*dp[stones.length-1][target];
-
+        return dp[end];
     }
 }
 ```
 
+### 买卖股票的最佳时机
 
+[121. 买卖股票的最佳时机 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/best-time-to-buy-and-sell-stock/)
 
-### 目标和
+因为不考虑股数，当天只存在两种情况，持有和全部售出，则有：
 
-[494. 目标和 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/target-sum/)
+- dp下标以及定义：
 
-此题如果只是求是否能找到该目标和，则变为最基本的01背包问题，但此题为统计有多少种方法能得到该目标和，因此01背包问题的基本框架不变，但是相应的dp的含义以及递推公式应当作出调整
-
-背包参数：
-
-- 不妨设t1为正数之和，t2为负数之和，则有：
-
-```
-t1+t2=target
-t1-t2=sum
-```
-
-解得：`t1=(target+sum)/2`，因此背包的容量为t1,即为正数(子集合)之和
-
-其他背包的相关参数与一般的01背包一致，不过多赘述
-
-dp:
-
-- dp以及下表的含义：
-
-  dp[j]表示得到为j的和有dp[j]中方法
+  - dp\[i][0]:第i天持有股票时获得的最多现金
+  - dp\[i][1]:第i天不持有股票获得的最多现金
 
 - 递推公式：
 
-  如果此前已经通过几种方法得到了添加nums[i]之前的情况，那么在加上nums[i]只有这么一种方法，即为dp[j]=dp[j-nums[i]],因此我们现在要考虑的是究竟有多少种方法能得到dp[j-nums[i]]，这个值由nums[i]所决定，如：
+  - 如果当天不持有股票，因为只能买一次，则要么之前==一直都不持有股票==，要么为前一天持有，当天把股票售出，递推公式为：
 
-  > - 已经有一个1（nums[i]） 的话，有 dp[4]种方法 凑成 dp[5]。
-  > - 已经有一个2（nums[i]） 的话，有 dp[3]种方法 凑成 dp[5]。
-  > - 已经有一个3（nums[i]） 的话，有 dp[2]中方法 凑成 dp[5]
-  > - 已经有一个4（nums[i]） 的话，有 dp[1]中方法 凑成 dp[5]
-  > - 已经有一个5 （nums[i]）的话，有 dp[0]中方法 凑成 dp[5]
+    ```java
+    dp[i][1]=Math.max(dp[i-1][1],dp[i-1][0]+prices[i])
+    ```
 
-  因此，只需要将所有nums[i]对应的dp[j-nums[i]]统计起来，即可得到最终的dp[j]
+  - 如果当天持有股票，则要么前一天也持有股票，不出售则收益不变，要么前一天没持有，当天买入，则有：
 
-  递推公式为：
-
-  ```java
-   dp[j]+=dp[j-nums[i]];
-  
-  ```
+    ```java
+    dp[i][0]=Math.max(dp[i-1][0],-prices[i])
+    ```
 
 - 初始化：
 
-  从递归公式可以看出，在初始化的时候dp[0] 一定要初始化为1，因为dp[0]是在公式中一切递推结果的起源，如果dp[0]是0的话，递归结果将都是0。
+  第一天如果持有，则需要花费现金，因此现金为负数
 
-  dp[0] = 1，理论上也很好解释，装满容量为0的背包，有1种方法，就是装0件物品。
+  如果第一天不持有，则手头现金仍为0
 
-- 遍历顺序：
-
-  与一般背包问题保持一致即可，先背后后物品
-
-  ![494.目标和](# Leetcode 刷题笔记.assets/20210125120743274.jpg)
-
-### 一和零
-
-[474. 一和零 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/ones-and-zeroes/)
-
-此题较为特殊的为背包的容量有两个维度，分别为0的数量和1的数量，即为m和n
-
-  dp：
-
-- dp数组的下标以及含义：
-
-  dp\[i][j]:最多有i个1和j个0dd1子集的大小为dp\[i][j]
-
-- 递推公式：
-
-  再次明确定义dp\[i][j]代表的时子集大小，因此在遍历值当前字符串时，只需要再计算完上一个字符串的结果下+1即可，而上一个字符串的结果可以通过遍历至当前字符串的dp减去当前字符串中的1和0得到，有：
-
-  ```java
-  dp[i][j]=dp[i-zeroNum][j-oneNum]+1
-  ```
-
-  而在遍历过程中取最大值，则有：
-
-  ```java
-  dp[i][j]=Math.max(dp[i-zeroNum][j-oneNum]+1,dp[i][j])
-  ```
-
-  
-
--  dp的初始化：
-
-  - dp\[0][0]毋庸置疑为0
-  - dp\[0][j]
-
-### 零钱兑换Ⅱ
-
-[518. 零钱兑换 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/coin-change-2/)
-
-每种硬币的数额不限，因此为完全背包
-
-背包参数：
-
-- 背包容量：amount
-- 背包中的元素，weight=value=coins[i]
-
-dp：
-
-- dp数组的下标以及含义：
-
-  dp[j]:总金额为j的零钱组合数为dp[j]
-
-- 递推公式：
-
-  由于不考虑排序问题，因此在遍历到coins[i]时，只需要将coins[i]加入其中，因此dp[j]=dp[j-coins[i]],统计不同的coins[i]即可，因此遍历coins[i]统计所有的可能进行累加即可，与目标和的做法完全一致，可得公式：
-
-  ```java
-  dp[j] += dp[j - coins[i]];
-  ```
-
-- 初始化：凑成总金额0的货币组合数为1，dp[0]=1
-
-- 遍历顺序：
-
-  按背包的正常遍历顺序，先遍历背包容量再遍历物品即可，但是由于为完全背包，因此遍历背包容量时需不断覆盖，因此为正序遍历
-
-  ```java
-  for (int i = 0; i < coins.size(); i++) { // 遍历物品
-      for (int j = coins[i]; j <= amount; j++) { // 遍历背包容量
-          dp[j] += dp[j - coins[i]];
-      }
-  }
-  ```
+- 遍历方式，从第一天遍历至最后一天即可
 
 完整代码：
 
 ```java
 class Solution {
-    public int change(int amount, int[] coins) {
-        int[] dp=new int[amount+1];
-        dp[0]=1;
-        for(int i=0;i<coins.length;i++){
-            for(int j=coins[i];j<=amount;j++){
-                dp[j]+=dp[j-coins[i]];
-            }
+    public int maxProfit(int[] prices) {
+        int[][]dp=new int[prices.length][2];
+        dp[0][0]=-prices[0];
+        dp[0][1]=0;
+        for(int i=1;i<prices.length;i++){
+            dp[i][0]=Math.max(dp[i-1][0],-prices[i]);
+            dp[i][1]=Math.max(dp[i-1][1],dp[i-1][0]+prices[i]);
         }
-        return dp[amount];
-       
-    }   
+        return dp[prices.length-1][1];
+
+    }
 }
 ```
 
 
 
-  
+### 买卖股票的最佳时机Ⅱ
+
+[122. 买卖股票的最佳时机 II - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/best-time-to-buy-and-sell-stock-ii/)
+
+此题与买卖股票的最佳时机Ⅰ唯一的不同就是可以重复买入卖出，因此计算q前一日未持有，但当日要买入时，变为拿之前卖出赚取的现金-当日的prices得到当日的现金
+
+```java
+class Solution {
+    public int maxProfit(int[] prices) {
+        int[][]dp=new int[prices.length][2];
+        dp[0][0]=-prices[0];
+        dp[0][1]=0;
+        for(int i=1;i<prices.length;i++){
+            dp[i][0]=Math.max(dp[i-1][0],dp[i-1][1]-prices[i]);
+            dp[i][1]=Math.max(dp[i-1][1],dp[i-1][0]+prices[i]);
+        }
+        return dp[prices.length-1][1];
+        
+    }
+}
+```
+
+
+
+### 买卖股票的最佳时机Ⅲ
+
+[123. 买卖股票的最佳时机 III - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/best-time-to-buy-and-sell-stock-iii/)
+
+由于整个交易过程中只能操作两次，因此当天的状态可以分为以下五种：
+
+> 1. 从未持有
+> 2. 第一次购入但还未卖出
+> 3. 第一次卖出后还未买入
+> 4. 第二次买入后还未卖出
+> 5. 第二次卖出
+
+其中，从未持有的收益为0，直接不考虑，不初始化也不递推
+
+- dp\[i][j]的及下标的含义：
+
+  在第i天，第j种状态下，最大的现金收益
+
+  dp\[i][j]表示为一种状态，而不是在当天进行操作，如dp\[i][1]表示已经进行了或当天要进行第一次购入，并且还未第一次卖出，如果第一次卖出，则归下一个管理
+
+- 递推公式：与前两题相似，由本身或者上一种状态得来dp\[i]0]为0，因此j=1是直接写-price[i]即可
+
+  ```java
+  		   dp[i][1]=Math.max(dp[i-1][1],-prices[i]);
+             dp[i][2]=Math.max(dp[i-1][2],dp[i-1][1]+prices[i]);
+             dp[i][3]=Math.max(dp[i-1][3],dp[i-1][2]-prices[i]);
+             dp[i][4]=Math.max(dp[i-1][4],dp[i-1][3]+prices[i]);
+  ```
+
+- 初始化
+
+  - 第一天进行卖出操作则利润为0
+  - 第一天进行买入操作：
+    - 第一次买入：减去第一天售价即可
+    - 第二次买入：可以认为在第一天买入卖出后又第二次买入
+
+完整代码：
+
+```java
+class Solution {
+    public int maxProfit(int[] prices) {
+       int n=prices.length;
+       if(n==0)return 0;
+       int[][]dp=new int[n][5];
+       dp[0][1]=-prices[0];
+       dp[0][3]=-prices[0];
+       for(int i=1;i<n;i++){
+           dp[i][1]=Math.max(dp[i-1][1],-prices[i]);
+           dp[i][2]=Math.max(dp[i-1][2],dp[i-1][1]+prices[i]);
+           dp[i][3]=Math.max(dp[i-1][3],dp[i-1][2]-prices[i]);
+           dp[i][4]=Math.max(dp[i-1][4],dp[i-1][3]+prices[i]);
+       }
+       return Math.max(dp[n-1][4],dp[n-1][2]);
+    }
+}
+```
+
+
+
+## DFS
+
+### 被围绕的区域
+
+[130. 被围绕的区域 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/surrounded-regions/)
+
+根据题意，边界上的均不算做被围绕的区域，因此与边界的点相连的点也不是被围绕的
+
+因此我们可以想到，先找到所有未围绕的O，对其进行标记，(直接标记为A)那么剩下的所有O全为被围绕的区域，将其全部改为X
+
+最后再将非围绕的O(现在为A)恢复成O即可
+
+代码如下
+
+```java
+class Solution {
+    public void solve(char[][] board) {
+        int row=board.length;
+        int col=board[0].length;
+        //从四个边界开始搜寻所有未被围绕的区域
+        for(int i=0;i<row;i++){
+            bfs(i,0,board);
+            bfs(i,col-1,board);
+        }
+        for(int i=0;i<col;i++){
+            bfs(0,i,board);
+            bfs(row-1,i,board);
+        }
+        //将所有所有被围绕的区域进行填充
+        for(int i=0;i<row;i++){
+            for(int j=0;j<col;j++){
+                if(board[i][j]!='A'){
+                    board[i][j]='X';
+                }
+            }
+        }
+        //对被标记的未围绕区域进行恢复为O
+        for(int i=0;i<row;i++){
+            for(int j=0;j<col;j++){
+                if(board[i][j]=='A'){
+                    board[i][j]='O';
+                }
+            }
+        }
+
+    }
+    public void dfs(int x,int y,char[][] board){
+        int rows=board.length;
+        int cols=board[0].length;
+        //只在范围内沿O进行搜索
+        if(x>=0&&x<rows&&y>=0&&y<cols&&board[x][y] == 'O'){
+            board[x][y]='A';
+            dfs(x-1,y,board);
+            dfs(x+1,y,board);
+            dfs(x,y-1,board);
+            dfs(x,y+1,board);
+        }
+    }
+}
+```
+
+### 岛屿数量
+
+[200. 岛屿数量 - 力扣（LeetCode） (leetcode-cn.com)](https://leetcode-cn.com/problems/number-of-islands/)
+
+此题与被围绕的区域不同的是，被围绕的区域中可以确定边界处未被围绕，因此可以从边界开始进行dfs。
+
+但是此题边界可能为水也可能为陆地，因此只能遍历整个二维数组，每个陆地点都进行一次计数，同时借助dfs将与该陆地点相连的其他陆地点“淹没”，避免重复统计
+
+其余的与dfs的基本格式一致
+
+```java
+class Solution {
+    public int numIslands(char[][] grid) {
+        int count=0;
+        for(int i=0;i<grid.length;i++){
+            for(int j=0;j<grid[0].length;j++){
+                if(grid[i][j]=='1'){
+                    dfs(grid,i,j);
+                    count++;
+                }
+            }
+        }
+        return count;
+
+    }
+    public void dfs(char[][] grid,int x,int y){
+        int rows=grid.length;
+        int cols=grid[0].length;
+        if(x>=0&&x<rows&&y>=0&&y<cols&&grid[x][y]=='1'){
+            grid[x][y]=0;
+            dfs(grid,x-1,y);
+            dfs(grid,x+1,y);
+            dfs(grid,x,y-1);
+            dfs(grid,x,y+1);
+        }
+    }
+}
+```
+
+
 
 ---
 ## 存疑
@@ -3961,6 +4087,10 @@ class Solution {
 ### 根据身高重建队列
 ### 买卖股票的最佳时机含手续费
 ### 监控二叉树
+
+### 打家劫舍Ⅲ
+
+
 
 ## 二刷仍不大会的题
 
