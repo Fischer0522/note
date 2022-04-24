@@ -1,4 +1,4 @@
-# docker部署springboot+mysql+redis
+# docker部署springboot+mysql+nosql
 
 最近将自己的后端项目部署到云服务器上，因此整理了从安装docker到项目部署的全过程，仅供参考
 
@@ -95,11 +95,11 @@ cd ~/mysql
 docker run -id \
 -p 3307:3306 \
 --name=c_mysql \
--v $PWD/conf:/etc/mysql/conf.d \
--v $PWD/logs:/logs \
--v $PWD/data:/var/lib/mysql \
+-v /root/app/mysql/conf:/etc/mysql/conf.d \
+-v /root/app/mysql/logs:/logs \
+-v /root/app/mysql/data:/var/lib/mysql \
 -e MYSQL_ROOT_PASSWORD=123456 \
-mysql5.7_utf8mb4
+mysql:5.7
 
 ```
 
@@ -284,7 +284,153 @@ data:
 
 在navicat中连接同样需要指定用户名，密码，ip，端口，数据库
 
+
+
+### ElasticSearch
+
+**下拉镜像：**
+
+```
+docker pull elasticsearch:7.16.2
+```
+
+**环境准备：**
+
+创建文件夹，用于挂载数据卷，实现数据持久化和配置文件
+
+配置文件如下：
+
+允许外网访问并且使其可以设置密码
+
+```yaml
+cluster.name: "test_evescn"
+network.host: 0.0.0.0
+#xpack.security.enabled: true
+http.cors.allow-headers: Authorization
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+```
+
+**启动镜像**
+
+```
+
+docker run -d --restart=always --user=root \
+  --privileged=true \
+  --name c_es \
+  -p 9200:9200 \
+  -p 9300:9300 \
+  --ulimit nofile=65536:65536 \
+  -v "/usr/local/sdyy/es7.16.2/elasticsearch.yml":/usr/share/elasticsearch/config/elasticsearch.yml \
+  -v "/usr/local/sdyy/es7.16.2/data":/usr/share/elasticsearch/data \
+  -v "/usr/local/sdyy/es7.16.2/logs":/usr/share/elasticsearch/logs \
+  -v "/usr/local/sdyy/es7.16.2/plugins":/usr/share/elasticsearch/plugins \
+  -e "discovery.type=single-node" \
+  -e ES_JAVA_OPTS="-Xms256m -Xmx256m" \
+  elasticsearch:7.16.2
+
+```
+
+> 分别把data，log和plugins挂载到宿主机上面，用于进行持久化和安装分词器插件
+>
+> 设置占用内存为256m
+>
+> 创建专有网络，单节点模式运行，不设置单节点或者集群则无法正常启动，报错为
+>
+> ```
+> ERROR: Elasticsearch did not exit normally - check the logs at /usr/share/elasticsearch/logs/docker-cluster.log
+> ```
+>
+> 端口映射
+
+之后便可以正常访问，但是我仍无法启动，查看日志遇到了以下报错
+
+```
+max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+```
+
+系统虚拟内存默认最大映射数为65530，无法满足ES系统要求，需要调整为262144以上。
+
+处理方法：
+
+- 设置vm.max_map_count参数
+
+```
+#修改文件
+sudo vim /etc/sysctl.conf
+ 
+#添加参数
+...
+vm.max_map_count = 262144
+```
+
+- 重新加载/etc/sysctl.conf配置
+
+```
+sysctl -p
+```
+
+可能是修改配置的时候手滑，又遇到了以下问题，也是无语
+
+```
+IPv4 forwarding is disabled. Networking will not work.
+```
+
+再次修改配置：
+
+修改/etc/sysctl.conf文件，添加如下内容：
+
+```
+net.ipv4.ip_forward=1
+```
+
+重新加载配置以及重启网络和docker
+
+```
+sysctl -p
+
+systemctl restart network && systemctl restart docker
+```
+
+
+
+至此，elasticsearch终于启动起来了，可以对其9200端口进行访问（别忘了防火墙放行）
+
+![img](docker部署springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)
+
+**密码设置：**
+
+为了安全显然不能使其在互联网上裸奔，因此需要进行密码设置，由于我们已经在es的配置文件中开启了设置密码的权限`xpack.security.enabled: true`，此处可以直接进行密码设置
+
+首先进入到容器当中
+
+```
+docker exec -it c_es /bin/bash
+```
+
+启用密码
+
+```
+elasticsearch-setup-passwords interactive
+```
+
+然后再去手动输入6个密码，至此密码设置已经完成
+
+此时在进行访问，使用浏览器则会提示进行安全认证，如果使用api调试工具则需设置auth
+
+![image-20220410024231381](docker部署springboot+mysql+redis.assets/image-20220410024231381.png)
+
+用户名默认为elastic，密码则为自己设置的密码（暂时还没弄清楚为6个密码中的的哪一个）
+
+**下载ik分词器**
+
+直接在GitHub上面下载即可，下载好后解压的ik的文件夹中，上传到挂载数据卷的宿主机目录即可
+
+重启docker，至此使用docker配置es的全过程已经结束，此时的es可以正常范围跟，可以配合springboot等正常使用
+
 ## 项目部署
+
+
 
 ### demo
 
@@ -456,7 +602,7 @@ demo为名字
 运行：
 
 ```
-docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --link c_mongo --name blogdemo1 blogdemo1 
+docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --link c_mongo --link c_es --name blogdemo1 blogdemo1 
 ```
 
 - -p指定端口映射
@@ -470,4 +616,6 @@ docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link
 ![image-20220326104918513](docker部署springboot+mysql+redis.assets/image-20220326104918513.png)
 
 redis与mysql均可以正常运行
+
+mongodb与elasticsearch同理，只要保证容器能够单独正常运行，springboot的连接配置文件编写正确，那么则--link后则可以正常运行
 
