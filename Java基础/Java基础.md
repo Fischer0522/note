@@ -151,3 +151,74 @@ lqw.eq(Strings.isNotEmpty(tagName),tag->{return tag.getName();},tagName);
 只有lambda表达式的体只调用一个方法而不做其他操作时，才能把Lambda表达式重写为方法引用
 
 `s -> s.length()==0` 既有调用，又有比较，无法重写为方法引用
+
+## 内部类
+
+### 匿名内部类
+
+基础语法
+
+```java
+ SuperType in1=new SuperType (..){
+   	内部类的方法与数据
+}
+```
+
+其中，SuperType为要实现的接口或者要扩展的类，如果为接口，则要实现其中的方法，如果为类，内部类要扩展这个类
+
+in1为对象名，用来调用匿名类方法的对象，只有大括号内的才为匿名内部类的东西，因此，确实是没有名字
+
+例：
+
+```java
+public class User {
+    private Integer age;
+    private String username;
+    public Predicate<String> predicate =new Predicate<String>(){
+        @Override
+        public boolean test(String s) {
+            return false;
+        }
+    };
+}
+```
+
+在匿名内部类中，实现了predicate接口，同时实现了其中的test方法
+
+函数式编程的使用中：
+
+```java
+list.removeIf(new Predicate<String>(){
+        @Override
+        public boolean test(String s) {
+            return s==null
+        }
+       });
+```
+
+与Lambda表达式相比较：
+
+```
+list.removeIf(testFind->{return s==null;});
+```
+
+与自己实现接口相比较
+
+```java
+public class MyContidion implements Predicate<String> {
+
+    @Override
+    public boolean test(String s) {
+        if(Strings.isNullOrEmpty(s)){
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+```java
+MyContidion myContidion=new MyContidion();
+list.removeIf(myContidion);
+```
+

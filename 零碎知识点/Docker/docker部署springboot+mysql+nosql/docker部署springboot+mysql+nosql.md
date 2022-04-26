@@ -1,4 +1,8 @@
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
 # docker部署springboot+mysql+Nosql
+=======
+# docker部署springboot+mysql+nosql
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 
 最近将自己的后端项目部署到云服务器上，因此整理了从安装docker到项目部署的全过程，仅供参考
 
@@ -95,11 +99,11 @@ cd ~/mysql
 docker run -id \
 -p 3307:3306 \
 --name=c_mysql \
--v $PWD/conf:/etc/mysql/conf.d \
--v $PWD/logs:/logs \
--v $PWD/data:/var/lib/mysql \
+-v /root/app/mysql/conf:/etc/mysql/conf.d \
+-v /root/app/mysql/logs:/logs \
+-v /root/app/mysql/data:/var/lib/mysql \
 -e MYSQL_ROOT_PASSWORD=123456 \
-mysql5.7_utf8mb4
+mysql:5.7
 
 ```
 
@@ -302,7 +306,11 @@ docker pull elasticsearch:7.16.2
 
 允许外网访问并且使其可以设置密码
 
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
 ```
+=======
+```yaml
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 cluster.name: "test_evescn"
 network.host: 0.0.0.0
 #xpack.security.enabled: true
@@ -314,6 +322,10 @@ xpack.security.transport.ssl.enabled: true
 **启动镜像**
 
 ```
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
+=======
+
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 docker run -d --restart=always --user=root \
   --privileged=true \
   --name c_es \
@@ -327,6 +339,10 @@ docker run -d --restart=always --user=root \
   -e "discovery.type=single-node" \
   -e ES_JAVA_OPTS="-Xms256m -Xmx256m" \
   elasticsearch:7.16.2
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
+=======
+
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 ```
 
 > 分别把data，log和plugins挂载到宿主机上面，用于进行持久化和安装分词器插件
@@ -390,9 +406,17 @@ sysctl -p
 systemctl restart network && systemctl restart docker
 ```
 
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
 至此，elasticsearch终于启动起来了，可以对其9200端口进行访问（别忘了防火墙放行）
 
 [![img](docker%E9%83%A8%E7%BD%B2springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)](https://github.com/Fischer0522/note/blob/master/零碎知识点/Docker/docker部署springboot%2Bmysql%2Bnosql/docker部署springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)
+=======
+
+
+至此，elasticsearch终于启动起来了，可以对其9200端口进行访问（别忘了防火墙放行）
+
+![img](docker部署springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 
 **密码设置：**
 
@@ -414,7 +438,11 @@ elasticsearch-setup-passwords interactive
 
 此时在进行访问，使用浏览器则会提示进行安全认证，如果使用api调试工具则需设置auth
 
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
 [![image-20220410024231381](docker%E9%83%A8%E7%BD%B2springboot+mysql+redis.assets/image-20220410024231381.png)](https://github.com/Fischer0522/note/blob/master/零碎知识点/Docker/docker部署springboot%2Bmysql%2Bnosql/docker部署springboot+mysql+redis.assets/image-20220410024231381.png)
+=======
+![image-20220410024231381](docker部署springboot+mysql+redis.assets/image-20220410024231381.png)
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 
 用户名默认为elastic，密码则为自己设置的密码（暂时还没弄清楚为6个密码中的的哪一个）
 
@@ -424,6 +452,7 @@ elasticsearch-setup-passwords interactive
 
 重启docker，至此使用docker配置es的全过程已经结束，此时的es可以正常范围跟，可以配合springboot等正常使用
 
+<<<<<<< HEAD:零碎知识点/Docker/docker部署springboot+mysql+redis/docker部署springboot+mysql+redis.md
 ### nginx
 
 1. 准备工作
@@ -649,7 +678,11 @@ nginx:latest
 
 
 
+=======
+>>>>>>> f4700f2ea1f25f79b959e7fe2eb4ec728fbefdd2:零碎知识点/Docker/docker部署springboot+mysql+nosql/docker部署springboot+mysql+nosql.md
 ## 项目部署
+
+
 
 ### demo
 
@@ -821,7 +854,7 @@ demo为名字
 运行：
 
 ```
-docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --link c_mongo --name blogdemo1 blogdemo1 
+docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link c_mysql --link c_redis --link c_mongo --link c_es --name blogdemo1 blogdemo1 
 ```
 
 - -p指定端口映射
@@ -835,4 +868,6 @@ docker run -d -p 9000:8080 -v /root/blog/static/img:/root/blog/static/img --link
 ![image-20220326104918513](docker部署springboot+mysql+redis.assets/image-20220326104918513.png)
 
 redis与mysql均可以正常运行
+
+mongodb与elasticsearch同理，只要保证容器能够单独正常运行，springboot的连接配置文件编写正确，那么则--link后则可以正常运行
 
