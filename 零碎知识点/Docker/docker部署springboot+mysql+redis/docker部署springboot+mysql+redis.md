@@ -1,4 +1,4 @@
-# docker部署springboot+mysql+redis
+# docker部署springboot+mysql+Nosql
 
 最近将自己的后端项目部署到云服务器上，因此整理了从安装docker到项目部署的全过程，仅供参考
 
@@ -283,6 +283,371 @@ data:
 如果将用户名，密码等单独进行单独配置的话，mongodb会将其按照字符数组处理，因此纯数字的密码一定要加括号使用字符串的形式，
 
 在navicat中连接同样需要指定用户名，密码，ip，端口，数据库
+
+
+
+### ElasticSearch
+
+**下拉镜像：**
+
+```
+docker pull elasticsearch:7.16.2
+```
+
+**环境准备：**
+
+创建文件夹，用于挂载数据卷，实现数据持久化和配置文件
+
+配置文件如下：
+
+允许外网访问并且使其可以设置密码
+
+```
+cluster.name: "test_evescn"
+network.host: 0.0.0.0
+#xpack.security.enabled: true
+http.cors.allow-headers: Authorization
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+```
+
+**启动镜像**
+
+```
+docker run -d --restart=always --user=root \
+  --privileged=true \
+  --name c_es \
+  -p 9200:9200 \
+  -p 9300:9300 \
+  --ulimit nofile=65536:65536 \
+  -v "/usr/local/sdyy/es7.16.2/elasticsearch.yml":/usr/share/elasticsearch/config/elasticsearch.yml \
+  -v "/usr/local/sdyy/es7.16.2/data":/usr/share/elasticsearch/data \
+  -v "/usr/local/sdyy/es7.16.2/logs":/usr/share/elasticsearch/logs \
+  -v "/usr/local/sdyy/es7.16.2/plugins":/usr/share/elasticsearch/plugins \
+  -e "discovery.type=single-node" \
+  -e ES_JAVA_OPTS="-Xms256m -Xmx256m" \
+  elasticsearch:7.16.2
+```
+
+> 分别把data，log和plugins挂载到宿主机上面，用于进行持久化和安装分词器插件
+>
+> 设置占用内存为256m
+>
+> 创建专有网络，单节点模式运行，不设置单节点或者集群则无法正常启动，报错为
+>
+> ```
+> ERROR: Elasticsearch did not exit normally - check the logs at /usr/share/elasticsearch/logs/docker-cluster.log
+> ```
+>
+> 端口映射
+
+之后便可以正常访问，但是我仍无法启动，查看日志遇到了以下报错
+
+```
+max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+```
+
+系统虚拟内存默认最大映射数为65530，无法满足ES系统要求，需要调整为262144以上。
+
+处理方法：
+
+- 设置vm.max_map_count参数
+
+```
+#修改文件
+sudo vim /etc/sysctl.conf
+ 
+#添加参数
+...
+vm.max_map_count = 262144
+```
+
+- 重新加载/etc/sysctl.conf配置
+
+```
+sysctl -p
+```
+
+可能是修改配置的时候手滑，又遇到了以下问题，也是无语
+
+```
+IPv4 forwarding is disabled. Networking will not work.
+```
+
+再次修改配置：
+
+修改/etc/sysctl.conf文件，添加如下内容：
+
+```
+net.ipv4.ip_forward=1
+```
+
+重新加载配置以及重启网络和docker
+
+```
+sysctl -p
+
+systemctl restart network && systemctl restart docker
+```
+
+至此，elasticsearch终于启动起来了，可以对其9200端口进行访问（别忘了防火墙放行）
+
+[![img](docker%E9%83%A8%E7%BD%B2springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)](https://github.com/Fischer0522/note/blob/master/零碎知识点/Docker/docker部署springboot%2Bmysql%2Bnosql/docker部署springboot+mysql+redis.assets/1623101-20211007213733061-461079555.png)
+
+**密码设置：**
+
+为了安全显然不能使其在互联网上裸奔，因此需要进行密码设置，由于我们已经在es的配置文件中开启了设置密码的权限`xpack.security.enabled: true`，此处可以直接进行密码设置
+
+首先进入到容器当中
+
+```
+docker exec -it c_es /bin/bash
+```
+
+启用密码
+
+```
+elasticsearch-setup-passwords interactive
+```
+
+然后再去手动输入6个密码，至此密码设置已经完成
+
+此时在进行访问，使用浏览器则会提示进行安全认证，如果使用api调试工具则需设置auth
+
+[![image-20220410024231381](docker%E9%83%A8%E7%BD%B2springboot+mysql+redis.assets/image-20220410024231381.png)](https://github.com/Fischer0522/note/blob/master/零碎知识点/Docker/docker部署springboot%2Bmysql%2Bnosql/docker部署springboot+mysql+redis.assets/image-20220410024231381.png)
+
+用户名默认为elastic，密码则为自己设置的密码（暂时还没弄清楚为6个密码中的的哪一个）
+
+**下载ik分词器**
+
+直接在GitHub上面下载即可，下载好后解压的ik的文件夹中，上传到挂载数据卷的宿主机目录即可
+
+重启docker，至此使用docker配置es的全过程已经结束，此时的es可以正常范围跟，可以配合springboot等正常使用
+
+### nginx
+
+1. 准备工作
+
+   （1）确保已安装docker和nginx
+
+   （2）签名文件
+
+   （3）域名
+
+2. 创建nginx映射文件、目录
+
+
+
+```cpp
+mkdir /root/docker-nginx
+
+//存放nginx配置文件
+mkdir /root/docker-nginx/conf.d
+
+//存放nginx日志（方便查错）
+mkdir /root/docker-nginx/logs
+
+//存放签名文件
+mkdir /root/docker-nginx/ssl
+
+//项目
+mkdir /root/docker-nginx/www
+```
+
+1. 在/root/docker-nginx/www 目录下创建个index.html文件，方便查看结果
+
+
+
+```bash
+cd /root/docker-nginx/www
+vim index.html
+```
+
+index.html 页面内容如下
+
+
+
+```xml
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>title</title>
+</head>
+<body>
+<h1>恭喜你，配置成功！</h1>
+</body>
+</html>
+```
+
+1. 在/root/docker-nginx/ssl目录下存放你的签名证书
+2. 在/root/docker-nginx下创建nginx默认配置文件
+
+
+
+```bash
+cd  /root/docker-nginx
+vim nginx.conf
+```
+
+下面是nginx提供的默认配置
+
+
+
+```ruby
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 768;
+    # multi_accept on;
+}
+
+http {
+
+    ##
+    # Basic Settings
+    ##
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    # server_tokens off;
+
+    # server_names_hash_bucket_size 64;
+    # server_name_in_redirect off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    ##
+    # SSL Settings
+    ##
+
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+    ssl_prefer_server_ciphers on;
+
+    ##
+    # Logging Settings
+    ##
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    ##
+    # Gzip Settings
+    ##
+
+    gzip on;
+    gzip_disable "msie6";
+
+    # gzip_vary on;
+    # gzip_proxied any;
+    # gzip_comp_level 6;
+    # gzip_buffers 16 8k;
+    # gzip_http_version 1.1;
+    # gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    ##
+    # Virtual Host Configs
+    ##
+
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+
+
+#mail {
+#   # See sample authentication script at:
+#   # http://wiki.nginx.org/ImapAuthenticateWithApachePhpScript
+# 
+#   # auth_http localhost/auth.php;
+#   # pop3_capabilities "TOP" "USER";
+#   # imap_capabilities "IMAP4rev1" "UIDPLUS";
+# 
+#   server {
+#       listen     localhost:110;
+#       protocol   pop3;
+#       proxy      on;
+#   }
+# 
+#   server {
+#       listen     localhost:143;
+#       protocol   imap;
+#       proxy      on;
+#   }
+#}
+```
+
+上面配置include /etc/nginx/conf.d/*.conf;这行可知，文件会包含conf.d目录下的所有.conf后缀的配置文件，所以我们只需要在conf.d目录下创建自己的配置文件即可。
+
+1. 在 /root/docker-nginx/conf.d 目录下创建default.conf配置文件
+
+
+
+```bash
+cd /root/docker-nginx/conf.d
+vim default.conf
+```
+
+内容如下
+
+
+
+```bash
+server {
+    listen       80;
+    server_name  你的域名;
+    #转发到http
+    rewrite ^(.*)$ https://$host$1 permanent;
+}
+server {
+    listen 443 ssl;
+    server_name  你的域名;
+    root   /usr/share/nginx/html;
+    index  index.html index.htm;
+    ssl_certificate   /root/ssl/你的证书.pem;
+    ssl_certificate_key  /root/ssl/你的证书.key;
+    ssl_session_timeout 5m;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_prefer_server_ciphers on;
+}
+```
+
+1. 启动nginx容器
+
+
+
+```jsx
+docker run -d \
+-p 80:80 -p 443:443\
+-v /root/docker-nginx/conf.d:/etc/nginx/conf.d:ro \
+-v /root/docker-nginx/nginx.conf:/etc/nginx/nginx.conf \
+-v /root/docker-nginx/logs:/var/log/nginx \
+-v /root/docker-nginx/www:/usr/share/nginx/html \
+-v /root/docker-nginx/ssl:/root/ssl \
+--name nginx \
+nginx:latest 
+```
+
+==特别注意：这里需要把443端口也映射出去==
+
+写在最后：
+ 以上只说明了nginx的一些相关配置。还有些其他配置需要注意，比如linux开发端口。如果是阿里云服务器，还需要在安全组开放端口
+
+
+
+作者：efe7aae46f66
+链接：https://www.jianshu.com/p/97dcf0d4270b
+来源：简书
+著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
+
+
 
 ## 项目部署
 
