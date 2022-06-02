@@ -566,10 +566,463 @@ T之间存在继承关系，但是传入后的Pair\<T>之间不存在任何继�
 
 ### 通配符类型
 
-允许类型参数发生变化
+通配符仅针对于某个实例，对该实例在声明泛型类时仍使用正常的泛型\<T>，只是在声明时不对传入的值进行具体约束
+
+表述传入一个不确定的类型，并加以限定
+
+- extends：表示参数化的类型可能是所指定的类型，或者是此类型的子类。
+- super ：用 super 进行声明，表示参数化的类型可能是所指定的类型，或者是此类型的父类型，直至 Object
+- 无限定
+
+**extends**
 
 例`Pair<? extends Employee>`表示任何泛型Pair类型的类型参数为Employee的子类，如Pair\<Manager>,而不是Pair\<String>
 
 此处的extends表示真正的继承关系，而不是像之前表限定作用
 
-仅在方法的传递参数时使用通配符来解决类型的问题，在声明泛型类时仍使用正常的泛型\<T>
+此时的setter、getter方法为：
+
+```java
+	? extends Employee getFirst()
+    void setFirst(? extends Employee)
+```
+
+```java
+// T为Object，String是Object的子类，满足约束
+ArrayList<? extends Object> list = new ArrayList<String>();//ok 
+list.add("abc");// error
+list.add(123)//满足通配符的要求，但是 Integer与String之间无直接关系，无法指向
+```
+
+可以理解为`ArrayList<? extends Object>`是`ArrayList<String>`的父类类型，可以接收`ArrayList<String>`。
+
+- 为什么不能存元素呢？
+
+规定的是上界为Object类型，那么Object子类都可以存，当然实际类型String的父类型也是可以的，那么就会出现子类引用指向父类对象的情况。 所以编译器禁止添加元素。
+
+- 为什么能取元素呢？
+
+规定的是上界，可以以上界的类型（父类类型）接收对象，不会出现问题。
+
+**super**
+
+而对于super的getter和setter：
+
+```java
+? super Manager getFirst()
+void setFirst(? super Manager)
+```
+
+情况与extends刚好相反，变为getter无法确定保证类型，只能使用Object进行返回
+
+即泛型下界，类型约束为T的基类。如：
+
+```
+//T为String，Object为String的基类，满足约束
+ArrayList<? super String> list = new ArrayList<Object>();//ok 
+list.add("abc");//ok
+Object s = list.get(0);// Object
+System.out.println(s);
+
+复制代码
+```
+
+可以理解为`ArrayList<? super String>`是`ArrayList<Object>`的父类类型，可以接收`ArrayList<String>`。 在scala中类似的语义是泛型的逆变。
+
+- 为什么可以存元素呢？
+
+规定的是下界为String类型，即所有String及其子类都可以存（可能不太恰当，String是final的）。String及String的子类都是实际类型Object的子类。 所以，添加元素不会有问题。
+
+- 为什么取出来的元素是Object类型
+
+定义的为泛型下界，不能确定是哪一级父类，使用Object一定不会错。
+
+**无限定**
+
+`Pair<?>`
+
+无法使用setter方法进行传入，getter方法返回的类型也为Object，可以用于一些无需setter和getter方法的简单操作，如判断是否为空等
+
+**带有超类型限定的允许写入一个泛型对象，带有子类型限定的允许读取一个泛型对象**
+
+**T 是一个 确定的 类型，通常用于泛型类和泛型方法的定义，？是一个 不确定 的类型，通常用于泛型方法的调用代码和形参，不能用于定义类和泛型方法。**
+
+## 并发
+
+将要执行的代码放在一个run方法之中，这个类要实现Runnable接口(其中只有一个run方法)，覆盖其run方法
+
+```java
+public class Myrun implements Runnable{
+    @Override
+    public void run() {
+        System.out.println("hello");
+    }
+}
+```
+
+Runnable为函数式接口，因此也可使用Lambda表达式来完成
+
+```java
+Runnable r =()-> {
+    System.out.println("hello");
+};
+Thread thread = new Thread(r);//创建并启动线程
+thread.start();
+```
+
+当调用thread.start()后，线程处于可运行的状态，具体何时运行需要根据操作系统的调度              
+
+stop方法被废弃之后无强制进程终止，可以通过interrupt方法请求中断一个进程
+
+Thread.currentThread获取当前进程 isInterrupted检查进程是否中断，进程阻塞状态下会抛出InterruptException异常
+
+此外，interrupted方法可以检查中断并且清除当前进程的中断状态
+
+### 同步
+
+对于临界资源的访问，若不使用原子性的操作，则会存在互相覆盖的问题，最后导致更新错误，因此需要使用锁来互斥的访问资源
+
+#### 锁
+
+获得锁后才能访问临界区，达到互斥访问
+
+分类：
+
+- ReetrantLock类
+- Synchronized关键字
+
+**ReetrantLock类**
+
+配合try/finally
+
+```java
+myLock.lock();
+    try{
+        临界区访问
+    } finally{
+        myLock.unLock();
+    }
+```
+
+**sychronized关键字**
+
+基于：Java每个对象都有一个内部锁，并且这个锁有一个内部条件，该锁会管理试图进入声明sychronized方法的线程，这个条件管理调用了wait的线程
+
+同步方法：
+
+在方法声明时使用sychronized关键字，则锁会保护整个方法
+
+```java
+public synchronized void  transfer(int from,int to,double amount)
+```
+
+sychronized关键字配套的条件变量为wait和notifyAll，在声明sychronized关键字的方法内或者代码块内使用
+
+同步块：
+
+在对象内部声明一个lock对象(Object)，sychronized获取该lock对象，上锁
+
+```java
+public class Bank {
+    
+    private Object myLock = new Object();
+    public void  transfer(int from,int to,double amount) throws InterruptedException{
+        sychronized(myLock){
+            doSomething...
+        }
+    }
+    
+}
+```
+
+
+
+#### 条件变量
+
+陷入休眠队列，等待满足条件后才能执行，与锁配合使用，只有获得了锁之后才能去唤醒/休眠
+
+```java
+ReentrantLock banklock=new ReentrantLock();//创建一个锁
+
+sufficientFunds=banklock.newCondition();//通过锁的newCondition方法获得一个条件对象
+while (condition...)
+           sufficientFunds.await();//陷入等待
+
+sufficientFunds.signalAll();//在别的线程唤醒所有休眠的线程
+
+```
+
+if/while：
+
+- signalAll唤醒所有的进程，无论是否满足条件，因此对于不满足条件的进程如果使用if，则会不满足条件而执行，因此应当使用while进行条件的重新检查
+
+**volatile字段**
+
+- 声明某个字段volatile后，编译器和虚拟机知道该字段可能被其他并发更新
+- volatile并不提供原子性，如i++，无法代替锁，只能确保在该线程的更新在其他线程也是可见的，但是该更新过程可能会被其他线程中断
+- 线程操作可见方式，并非同步方式
+
+**原子操作**
+
+只对变量进行赋值/读取操作时：
+
+- AtomicInteger类：incrementAndGet/decrementAndGet 大量访问相同的原子值时，性能会大幅下降
+- IntegerAdder类：多个线程单独累加，最后合计出总值，性能较高
+
+#### 经典问题
+
+**生产者消费者**
+
+条件：
+
+- 生产者消费者共用一个大小为10的缓冲区
+- 非满时生产者可以生产放入其中
+- 非空消费者可以从中取出进行消费
+
+其中，使用了synchronized关键词，以及缓冲区List的对象锁，所有的线程去竞争缓冲区list的对象锁
+
+因为只有声明了同步块才能使用条件变量，因此临界区为整个consume/produce函数
+
+在条件变量判断时使用while而不是if，防止唤醒之后跳过检查的情况，在只有一个生产者进程时不存在任何问题，但是在开了五个生产者线程后，如果使用使用if，则会跳过条件判断，最后导致缓冲区中的元素大于10个
+
+生产者类：
+
+```java
+public class Producer {
+     volatile ArrayList<Integer> list;
+    public Producer(ArrayList<Integer> list){
+        this.list = list;
+    }
+    public void produce(){
+        while (true){
+
+        synchronized (list) {
+            while(list.size()>=10) {//使用while而不使用if，防止唤醒后跳过判断
+                try {
+                    list.wait();//缓冲区满则休眠
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            Random random = new Random();
+            int i = random.nextInt(100);
+            list.add(i);
+            System.out.print("生产了："+i+"  ");
+            System.out.println("当前的容器为："+list);
+            list.notify();//唤醒线程
+        }
+    }
+    }
+}
+```
+
+消费者类：
+
+```java
+public class Consumer {
+    volatile ArrayList<Integer> list;
+    public Consumer(ArrayList<Integer> list){
+        this.list = list;
+    }
+    void consume() {
+        while(true) {
+            synchronized (list) {
+                while(list.size()==0) {
+                    try {
+                        list.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                Integer remove = list.remove(0);
+                System.out.print("消费了:"+remove+" ");
+                System.out.println("当前的容器为："+list);
+                list.notify();
+
+            }
+        }
+    }
+}
+```
+
+启动类：
+
+```java
+public class Factory {
+    public static void main(String[] args) {
+        ArrayList list = new ArrayList(1);
+        Runnable r1 = () -> {
+            Consumer consumer = new Consumer(list);
+            consumer.consume();
+        };
+        Runnable r2 = ()-> {
+            Producer producer = new Producer(list);
+            producer.produce();
+        };
+        for(int i = 0; i< 5; i++){
+            //生产者消费者各创建5个进程
+            Thread thread1 = new Thread(r1);
+            Thread thread2 = new Thread(r2);
+            thread1.start();
+            thread2.start();
+        }
+    }
+    
+}
+```
+
+
+
+### 任务与线程池
+
+**Runnable/Callable/Future**
+
+Runnable 封装一个异步运行的任务，无参数无返回值，只有一个方法run
+
+Callable为一个存在返回值的任务，只有一个方法call
+
+Future保存异步计算的结果，将Future交给某个线程，这个Future对象的所有者在结果计算好之后就可以获得结果，可以通过get获取
+
+执行callable的一种方法是FutureTask，它实现了Future和Runnable接口，用于构造线程执行任务，一个FutureTask对应这一个线程，因此，创建线程是传入同一个FutureTask只会创建一个线程：
+
+```java
+public class Main2 {
+    public static void main(String[] args) throws InterruptedException{
+        Callable c = ()->{
+            String action = "hello";
+            System.out.println(action);
+            return action;
+        };
+
+        ExecutorService executorService = Executors.newFixedThreadPool(5);
+        for(int i =0; i < 6;i++){
+            FutureTask<Integer> integerFutureTask = new FutureTask<Integer>(c);//若放在循环之外则只会向线程池提交一个线程，从而只执行一次                    
+            Thread thread = new Thread(integerFutureTask);
+            Future<?> submit = executorService.submit(thread);
+        }
+
+        //thread.start();
+    }
+}
+```
+
+**执行器**
+
+执行器类有静态工厂方法，用于创建线程池，返回一个ExecutorService
+
+可以通过submit方法将Runnable或者Callable提交给线程池并且执行
+
+线程池所作的工作：
+
+1. 调用Executor的静态方法创建对应的线程池
+2. 通过submit将Runnable或者Callable提交到线程池并且执行
+3. 保存submit返回的Future对象，对结果进行处理
+4. 若不想再提交时，使用shutdown关闭
+
+**控制任务组**
+
+提交：
+
+- invokeAny：提交一个Callable集合中的所有对象至线程池，返回某一个执行结束的结果，通常是最快的那个
+- invokeAll：提交一个Callable集合中的所有对象至线程池，该方法会阻塞，直至所有的任务都完成，返回一个Future集合
+
+**小Demo**
+
+```java
+public static void testFuture()throws InterruptedException,ExecutionException{
+        List<Integer> list = new ArrayList<>();
+        list.add(1);
+        list.add(3);
+        list.add(8);
+        list.add(12);
+        List<Callable<Integer>> tasks = new ArrayList<>();
+        for(int num:list){
+            Callable<Integer> task =()->{ return num;};//该Callable仅做简单处理，将num返回
+            tasks.add(task);
+        }
+        ExecutorService executorService = Executors.newCachedThreadPool();//创建线程池
+        Integer integer = executorService.invokeAny(tasks);//返回某一个（最快）的结果
+        System.out.println(integer);
+        List<Future<Integer>> futures = executorService.invokeAll(tasks);//返回一个Future集合，处理所有结果
+        int total = 0;
+        for(Future<Integer> future: futures){
+            total+=future.get();//所有结果累加得到最终的计算结果
+        }
+        System.out.println(total);
+    }
+```
+
+
+
+**ForkJoin**
+
+fork-join用于将一个任务分解成子任务
+
+```java
+if(problemSize<threshold){
+    solve the problem
+} else{
+    break problem into subproblems
+}
+```
+
+ demo:
+
+二分法统计一个数组中有多少个元素满足特定的属性
+
+需要一个拓展了RecursiveTask\<T>的类，再覆盖compute方法调用子任务，合并结果
+
+```java
+public class Counter extends RecursiveTask<Integer> {
+    
+    public static final int THRESHOLD = 1000;//当子数组长度小于1000时开始进行统计
+    private double[] values;
+    private int from;//左端点
+    private int to;//右端点
+    private DoublePredicate filter;//函数式接口，接受一个条件(传入一个Lambda表达式即可)
+
+    public Counter(double[] values, int from, int to, DoublePredicate filter) {
+        this.values = values;
+        this.from = from;
+        this.to = to;
+        this.filter = filter;
+    }
+    @Override
+    protected Integer compute() {
+        if(to - from <THRESHOLD){//分割到阈值时，停止递归
+            int count = 0;
+            for(int i = from;i < to; i++){
+                if(filter.test(values[i])) count++;//满足条件，进行统计
+            }
+            return count;
+        } else{//二分递归提交任务
+            int mid = (from+to)/2;
+            Counter first = new Counter(values,from,mid,filter);
+            Counter second = new Counter(values,mid,to,filter);
+            invokeAll(first,second);
+            return first.join()+second.join();//结果合并
+        }
+    }
+}
+```
+
+启动类：
+
+```java
+public class ForkJoinTest {
+    public static void main(String[] args) {
+        final int SIZE = 10000000;
+        double[] numbers = new double[SIZE];                
+        for(int i = 0;i < SIZE;i++){
+            numbers[i] = Math.random();
+        }
+        Counter counter = new Counter(numbers,0,numbers.length,x-> x>0.5);
+        ForkJoinPool forkJoinPool = new ForkJoinPool();
+        forkJoinPool.invoke(counter);
+        System.out.println(counter.join());
+    }
+}
+```
+
+​          
+
