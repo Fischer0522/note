@@ -19,6 +19,11 @@ String result = test.getName().getTime().getNum().getAnswer();
 
 链式编程当中， 每一次get都可能存在为空的问题，通过optional进行空值检测，不需要显示的if！=null进行判断
 
+**使用提示：**
+
+- Optional类型的变量永远都不应该为null
+- 不要在集合中使用optional
+
 ## Optional的构造函数
 
 - Optional.of(obj)：它要求传入的 obj 不能是 null 值的, 否则直接报NullPointerException 异常。

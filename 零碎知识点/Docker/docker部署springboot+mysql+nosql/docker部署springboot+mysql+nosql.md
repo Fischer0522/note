@@ -641,13 +641,14 @@ server {
 
 ```jsx
 docker run -d \
--p 80:80 -p 443:443\
+-p 80:80 -p 443:443 \
 -v /root/docker-nginx/conf.d:/etc/nginx/conf.d:ro \
 -v /root/docker-nginx/nginx.conf:/etc/nginx/nginx.conf \
 -v /root/docker-nginx/logs:/var/log/nginx \
 -v /root/docker-nginx/www:/usr/share/nginx/html \
 -v /root/docker-nginx/ssl:/root/ssl \
 --name nginx \
+--link blogdemo1 \
 nginx:latest 
 ```
 

@@ -4,6 +4,8 @@
 
 ![image-20220224143204399](Stream.assets/image-20220224143204399.png)
 
+流遵循了做什么而非怎么做的原则，只需要描述要做什么即可
+
 - 元素是特定类型的对象，形成一个队列。 Java中的Stream并不会存储元素，而是按需计算。
 - **数据源** 流的来源。 可以是集合，数组，I/O channel， 产生器generator 等。
 - **聚合操作** 类似SQL语句一样的操作， 比如filter, map, reduce, find, match, sorted等。
@@ -19,7 +21,11 @@
 
 ### 生成流
 
-![image-20220224143851551](Stream.assets/image-20220224143851551.png)
+生成方式：
+
+- Collection接口的stream方法可以将任何一个集合转换成流
+- 对于一个数组，可以使用Array.stream
+- Stream.of可以将任何一个数组或者多个元素转换为一个流
 
 ```java
 Collection<String> list=new ArrayList<>();
@@ -37,6 +43,8 @@ Collection<String> list=new ArrayList<>();
         Stream<String> nameStreams= Stream.of(names);
 
 ```
+
+![image.png](Stream.assets/1635404163942-10e8eb88-c3d0-4f4b-9670-6fbae2dbcf7c-16541600421382.png)
 
 ### 常用中间操作方法API
 
@@ -137,18 +145,9 @@ List<String> strings = Arrays.asList("abc", "", "bc", "efg", "abcd","", "jkl");
 long count = strings.parallelStream().filter(string -> string.isEmpty()).count();
 ```
 
-- Collectors
+**收集**
 
-Collectors 类实现了很多归约操作，例如将流转换成集合和聚合元素。Collectors 可用于返回列表或字符串：
-
-```java
-List<String>strings = Arrays.asList("abc", "", "bc", "efg", "abcd","", "jkl");
-List<String> filtered = strings.stream().filter(string -> !string.isEmpty()).collect(Collectors.toList());
- 
-System.out.println("筛选列表: " + filtered);
-String mergedString = strings.stream().filter(string -> !string.isEmpty()).collect(Collectors.joining(", "));
-System.out.println("合并字符串: " + mergedString);
-```
+通过一个collect方法，他接受一个collector接口的实例，Collectors提供用于生成常见收集器的工厂方法，如Collectors.toList,Collectors.toSet等
 
 ### 开发中的实际应用
 
