@@ -574,6 +574,10 @@ T之间存在继承关系，但是传入后的Pair\<T>之间不存在任何继�
 - super ：用 super 进行声明，表示参数化的类型可能是所指定的类型，或者是此类型的父类型，直至 Object
 - 无限定
 
+**类型擦除：**
+
+`List<? extends T>`和`List<? super T>`类型擦除后得到的结果均为Tc
+
 **extends**
 
 例`Pair<? extends Employee>`表示任何泛型Pair类型的类型参数为Employee的子类，如Pair\<Manager>,而不是Pair\<String>
@@ -1025,4 +1029,6 @@ public class ForkJoinTest {
 ```
 
 ​          
+
+### 异步计算
 
