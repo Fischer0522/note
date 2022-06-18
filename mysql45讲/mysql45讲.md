@@ -89,7 +89,7 @@ redo log 分为两部分，一部分为存储在内存中的redo buffer ，另�
 binlog与redolog的不同：
 
 - redolog InnoDB特有，binlog为mysql server层实现的 任何引擎都可以使用
-- redolog为物理日志，记录在某个数据页上做了什么修改，binlog为逻辑日志，记录语句的原始逻辑 statement格式记录sql语句，row格式记录行的内容
+- redolog为物理日志，记录在某个数据页上做了什么修改，binlog为逻辑日志，记录语句的原始逻辑 （statement格式记录sql语句，row格式记录行的内容）
 - redo log循环写，空间大小固定会用完，binlog可切换新的文件进行追加
 - 备份时即为备份 binlog 用于归档
 
@@ -677,8 +677,141 @@ mysql> select count(*) from tradelog where month(t_modified)=7;
 
 > 也就是说，幻读指的是一个事务在前后两次查询同一个范围的时候，后一次查询看到了前一次查询没有看到的行
 
-![img](mysql45%E8%AE%B2.assets/5bc506e5884d21844126d26bbe6fa68b.png)
+![img](mysql45%E8%AE%B2.assets/dcea7845ff0bdbee2622bf3c67d31d92.png)
 
 - 在上图中，由于`for update`将其加上了排他锁，采用的为当前读，因此会将insert的新值读出，称为当前读
 - 幻读只会在当前读下才会出现(无当前读由于存在事务隔离因此不会读取到最新的值)
 - 幻读专指新插入的行
+
+**幻读产生的问题**
+
+- 锁结果被破坏
+
+  如果只对访问的数据进行加锁，如在上面的表上，由于只有id=5着一行的d=5，因此只锁上了这一行，但是在C插入数据之后，d=5的行就不止id=5这一行，“锁住d=5的所有行”这个锁的结构就被破坏
+
+- 数据库中的数据与日志中的数据产生不一致的问题
+
+  - 在数据库中按照时间的发生顺序执行，只有一行当前状态下d=5的会被修改为100
+  - 在日志中，按照事务的提交顺序进行记录，事务C的插入在A的更新之前，导致A把C新插入的数据也一并修改，导致了数据不一致的问题
+
+  数据不一致的问题无论是锁满足条件的行还是锁住所有行均无法解决，究其本质时因为新插入的数据无法锁上，从而引出的间隙锁的概念
+
+**间隙锁**
+
+只在可重复读的隔离条件下产生          
+
+通过间隙锁，保证新记录的插入被阻塞，在此区间内插入数据均会被阻塞
+
+![img](mysql45%E8%AE%B2.assets/e7f7ca0d3dab2f48c588d714ee3ac861.png)
+
+间隙锁与间隙锁之间不存在冲突问题，不同的线程可以同时对同一个间隙进行加锁操作，只有加间隙锁和想间隙中插入数据这两个操作之间存在冲突，插入数据的过程会被阻塞
+
+> 间隙锁和行锁合称 **next-key lock**，每个 next-key lock 区间为**左开右闭**。也就是说，我们的表 t 初始化以后，如果用 select * from t for update 要把整个表所有记录锁起来，就形成了 7 个 next-key lock，分别是 (-∞,0]、(0,5]、(5,10]、(10,15]、(15,20]、(20, 25]、(25, +supremum]。
+
+**间隙锁和next-key lock存在的问题**
+
+![img](mysql45%E8%AE%B2.assets/df37bf0bb9f85ea59f0540e24eb6bcbe.png)
+
+A和B在扫描到id = 9时发现不存在，均加上了间隙锁，此时AB的间隙锁互相阻止对方插入，两阶段锁协议又导致事务不提交锁不释放，死锁产生
+
+### 行锁与间隙锁加锁规则
+
+**两个原则、两个优化、一个bug**
+
+> 原则 1：加锁的基本单位是 next-key lock。next-key lock 是前开后闭区间。
+>
+> 原则 2：查找过程中访问到的对象才会加锁。
+>
+> 优化 1：索引上的等值查询，给唯一索引加锁的时候，next-key lock 退化为行锁。
+>
+> 优化 2：索引上的等值查询，向右遍历时且最后一个值不满足等值条件的时候，next-key lock 退化为间隙锁。
+>
+> 一个 bug：唯一索引上的范围查询会访问到不满足条件的第一个值为止。
+
+**解释**
+
+![img](mysql45%E8%AE%B2.assets/e7f7ca0d3dab2f48c588d714ee3ac861.png)
+
+对于原则二，假设表中c为普通索引，在执行`select c from t where c =15`：
+
+- 访问到了c=15，加上next-key lock,区间为(10,15]
+- 并且由于c为普通索引，因此会继续遍历直至第一个不满足条件的值，因此找到了(15,20],又因为为最后一个不满足条件的值，此时退化成(15,20)的间隙锁
+- **只有访问到的对象才会加锁**查询的字段只有C，因此存在覆盖索引，无需访问主键索引，因此在主键索引上就不存在锁
+
+bug问题，对于一个范围查询`select * from where id>10 and id<=15 for update`：
+
+- 由于是范围查询，因此在最后一个不满足条件的20并不会退化为间隙锁，导致对于20的修改也无法进行，但是对20修改并不会产生什么负面影响
+
+limit加锁问题：
+
+​	通过limit，可以提前终止遍历过程，无需遇到第一个不满足条件的值，因此可以少加一	个next-key lock，增加并发度
+
+### 日志流程
+
+**binlog写入流程**
+
+ binlog首先写入binlog cache，每个线程独有一个binlog cache，所有线程共享一份binlog文件
+
+写入binlog文件的过程分为write和fsync，write只写入到page cache中，fsync才是真正对数据进行持久化，可以通过sync_binlog来指定积累几个事务再进行一次持久化(page cache的具体知识见操作系统)
+
+在主机发生异常重启时，未fsync持久化的binlog会丢失，mysql重启时则不会
+
+**redo log 写入机制**
+
+redo log也存在redo log buffer,page cache ,和真正持久化这三种状态，可通过innodb_flush_log_at_trx_commit来控制是留在redo log buffer内还是直接持久化还是写入到page buffer当中去
+
+> 事务执行中间过程的 redo log 也是直接写在 redo log buffer 中的，这些 redo log 也会被后台线程一起持久化到磁盘。也就是说，一个没有提交的事务的 redo log，也是可能已经持久化到磁盘的。
+
+redo log共有三种方式将redo log buffer中的日志信息(包含未提交事务)写到磁盘当中
+
+- redo log buffer后台有一个线程，每一秒将redo log buffer 中的信息write后fsync
+- redo log buffer 占用的空间即将达到 innodb_log_buffer_size 一半的时候，后台线程会主动写盘
+- 并行的事务提交的时候，顺带将这个事务的 redo log buffer 持久化到磁盘，事务A执行了一半写到buffer中的redo log会随着事务B的提交一并写到磁盘当中(innodb_flush_log_at_trx_commit 设置为1)
+
+> 每秒一次后台轮询刷盘，再加上崩溃恢复这个逻辑，InnoDB 就认为 redo log 在 commit 的时候就不需要 fsync 了，只会 write 到文件系统的 page cache 中就够了。
+>
+> redo log 状态改为commit的时候不会进行fsync，因为只要binlog 写磁盘成功，就算redo log 的状态还是prepare也没有关系会被认为事务已经执行成功，所以只需要write 到page cache就ok了，没必要再浪费io主动去进行一次fsync。通过后台线程进行fsync即可
+
+**组提交**
+
+LSN：日志逻辑序列号，单调递增，每次写入新的长为lentgh的redo log 都会加length
+
+第一个到达的会作为这组的leader，后续还有其他事务到达时，它的LSN会递增当它进行提交时，会将所有LSN小于等于leaderLSN的redo log一同持久化到磁盘，以组的形式进行提交
+
+
+
+### 主备一致
+
+MySQL通过binlog的归档功能完成了主库从库的一致性
+
+分为MS和双M两种模式
+
+在MS(master-slave)模式下，A为M，B为S，则B获取A的binlog进行备份
+
+备库B建议设为只读状态，防止误操作和双写时导致的数据不一致问题，用于AB之间同步更新的线程拥有超级权限，不受其影响
+
+**binlog的三种格式**
+
+- statement
+  - binlog中记录的为sql语句
+  - 主从可能存在不一致的情况(使用limit时优化器索引选择的不一致)
+- row
+  - 记录的为事件(Delete_rows event，用于定义删除的行为)
+  - 删除时记录的为真实删除行的主键id，因此不存在数据不一致的情况
+  - 相比于statement形式下，占用的空间较大
+- mixed
+  - 由mysql自己判断是否存在主从不一致的情况，从而选择row还是statement
+
+**数据恢复**
+
+使用row格式的binlog完成数据恢复，由于row格式会完整的保存信息，对于一条delete，只需要将delete重新变为insert即可将信息恢复，(update可前后对调，insert变为delete)
+
+**循环复制问题**
+
+在使用双M模式时，存在循环复制问题，即B获取了A的新生成的binlog执行，A又会获取B执行了binlog后的binlog重新执行一遍，导致了循环复制
+
+解决规则：
+
+> 1. 规定两个库的 server id 必须不同，如果相同，则它们之间不能设定为主备关系；
+> 2. 一个备库接到 binlog 并在重放的过程中，生成与原 binlog 的 server id 相同的新的 binlog；
+> 3. 每个库在收到从自己的主库发过来的日志后，先判断 server id，如果跟自己的相同，表示这个日志是自己生成的，就直接丢弃这个日志。
