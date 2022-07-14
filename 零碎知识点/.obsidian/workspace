@@ -4,15 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "2c840eaf7d42303f",
+        "id": "2d3fd4a4d726d678",
         "type": "leaf",
         "state": {
-          "type": "markdown",
-          "state": {
-            "file": "java高级特性/Stream/Stream.md",
-            "mode": "preview",
-            "source": false
-          }
+          "type": "empty",
+          "state": {}
         }
       }
     ],
@@ -69,7 +65,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "java高级特性/Stream/Stream.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -87,12 +82,12 @@
     "width": 300,
     "collapsed": true
   },
-  "active": "2c840eaf7d42303f",
+  "active": "2d3fd4a4d726d678",
   "lastOpenFiles": [
+    "拦截器/拦截器.assets/image-20220312162300084.png",
+    "踩坑血泪史/406无法解析/406无法解析.md",
     "java高级特性/Stream/Stream.md",
     "java高级特性/DateTime/Java中的时间类.md",
-    "拦截器/拦截器.md",
-    "拦截器/拦截器.assets/image-20220312162300084.png",
-    "踩坑血泪史/406无法解析/406无法解析.md"
+    "拦截器/拦截器.md"
   ]
 }
