@@ -899,3 +899,292 @@ MySQL通过binlog的归档功能完成了主库从库的一致性
 > 1. 规定两个库的 server id 必须不同，如果相同，则它们之间不能设定为主备关系；
 > 2. 一个备库接到 binlog 并在重放的过程中，生成与原 binlog 的 server id 相同的新的 binlog；
 > 3. 每个库在收到从自己的主库发过来的日志后，先判断 server id，如果跟自己的相同，表示这个日志是自己生成的，就直接丢弃这个日志。
+
+### 备库并行复制
+
+为了保证备库能对主库的数据进行快速备份，因此在MySQL5.6之后，支持多线程复制，通过多线程的方式将主库的日志在备库上执行
+
+原本的sql_thread变为coordinator，只负责读取中转日志和分发事务，事务的具体执行由worker来负责
+
+![img](mysql45讲.assets/bcf75aa3b0f496699fd7885426bc6245.png)
+
+规则：
+
+- 更新同一行的两个事务，必须分发给同一个worker，防止执行次序问题导致覆盖
+- 一个事务不可拆分，必须放到同一个worker当中
+
+**MySQL5.6的并行策略**
+
+MySQL5.6的并行复制的粒度为按库并行，即以库为单位分发给worker，通过key-value的标记当前这个worker中事务所涉及的库，key为库名，value为涉及的库的数量
+
+但如果主库中的表都放在同一个库内，这个策略则失效，重新变为单线程模式，或者不同库的热点不同，一个为业务逻辑库，一个为配置库，则只有业务逻辑库存在较大的并发，重回单线程
+
+### 误删数据
+
+**误删行**
+
+在binlog为row形式时，可以直接将操作进行逆向运行，delete变insert，各个事务之间按时间逆序执行，即可恢复
+
+建议在临时库上进行操作，然后再将恢复后确认过的数据再从临时库恢复回主库
+
+**误删库/表**
+
+通过备份+binlog的方式
+
+需要借助binlog的全盘备份，进行恢复，要求线上有定期的全量备份，并实时备份binlog
+
+先将上一次全量备份的日志应用于临时库，再将上一次全量备份到当前的实时备份的除去误删除操作的语句，全部应用到临时库上，之后再将临时库的数据恢复到主库当中去
+
+​	**延迟复制备库**
+
+如如果复制备库和主库之间延迟一个小时，则如果主库出现了误删的情况，只需要通过备库再追加一个小时即可恢复数据
+
+### kill进程
+
+在执行了 kill query thread_id_B时，进行如下处理
+
+- 将进程B的运行状态改为THD::KILL_QUERY
+- 向事务B的执行进程发送一个信号，用于告知进程的状态发生了变化，让其来处理THD::KILL_QUERY
+
+1. 一个进程的执行过程中存在埋点，只有在埋点才会判断线程的状态
+
+2. 只有能够被唤醒的等待最后才能执行到埋点出，如处于wait状态的线程便是可以唤醒的，但是处于IO等待或者达到InnoDB并发上限，未被执行在等待的线程均为不可唤醒的
+
+3. 语句从进入终止逻辑，到最后终止逻辑完成，存在一个过程
+
+对于达到InnoDB并发线程上限后还未执行的线程，只有在被选中执行后，才能检查线程的状态，发现了KILL_QUERY 或者KILL_CONNECTION后，才会进入终止逻辑
+
+### 查询结果的处理逻辑
+
+**server层**
+
+查询结果返回给客户端的过程是边读边发的
+
+1. 对于查询的结果，像将其写入到net_buffer当中，直至net_buffer写满
+2. 调用网络接口发出去，发送给客户端
+3. 发送成功则清空net_buffer，继续读取
+4. 如果发送函数返回 EAGAIN 或 WSAEWOULDBLOCK，就表示本地网络栈（socket send buffer）写满了，进入等待。直到网络栈重新可写，再继续发送。
+
+sending to client表示net_buffer已经写满
+
+只有当查询结果不能够全部放入到net_buffer当中时，需要等待net_buffer清空后再执行时，才显示sending to client，只要查询结果能全部放入到net_buffer当中，执行器就可认为执行结束，与net_buffer是否能放入到socket send buffer这个过程无关，而socket send buffer不仅只有MySQL在使用
+
+**InnoDB**
+
+内存的数据页在Buffer Pool中管理，借助于内存，减少磁盘IO，从而加速查询
+
+InnoDB的内存管理采用的为改进LRU算法，即按照 5:3 的比例把整个 LRU 链表分成了 young 区域和 old 区域用于解决全盘扫描导致的内存页淘汰从而命中率急剧下降的问题
+
+![img](mysql45讲.assets/21f64a6799645b1410ed40d016139828.png)
+
+- 新加入的数据页，放在old区，便于如全盘扫描等情况下对其进行快速淘汰
+- 处于old区的数据页，如果在链表中存在超出的一定时间，则移动到链表的头部去，默认为1000ms，由innode_old_blocks_time控制，与操作系统当中的多级反馈队列调度方式的设计思想由相似之处
+
+
+
+### Join执行过程
+
+执行Join时，主要可以根据是否使用索引分为两种情况，对应不同的算法
+
+```mysql
+CREATE TABLE `t2` (
+  `id` int(11) NOT NULL,
+  `a` int(11) DEFAULT NULL,
+  `b` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `a` (`a`)
+) ENGINE=InnoDB;
+
+drop procedure idata;
+delimiter ;;
+create procedure idata()
+begin
+  declare i int;
+  set i=1;
+  while(i<=1000)do
+    insert into t2 values(i, i, i);
+    set i=i+1;
+  end while;
+end;;
+delimiter ;
+call idata();
+
+create table t1 like t2;
+insert into t1 (select * from t2 where id<=100)
+```
+
+
+
+**使用索引：**
+
+```mysql
+select * from t1 straight_join t2 on (t1.a=t2.a);
+```
+
+对应的算法为Index Nested-Loop Join
+
+执行过程：
+
+1. 从t1中取出一条数据
+
+2. 根据t1.a去t2中查询
+
+3. 取出t2中满足条件的行，和t1的查询结果组成一个字段，作为结果集
+
+4. 重复上述结果查询出所有
+
+如果不使用join,则需要先从t1中查询出所有结果，再遍历t1的结果去t2中查询，总共执行了101条语句，比直接使用Join多了100次交互（扫描的行数的查询的次数相同，但是多了执行sql的开销，如优化器和执行器部分），因此不如直接使用Join语句
+
+​	**驱动表的选择**
+
+对于驱动表，需要进行全表扫描获得所有行，而对于被驱动表，只需根据条件走索引查询即可，综合复杂度为:N + N*2*log2(M)。(N为驱动，M被驱动)，因此选取小表作为驱动表的复杂度较低
+
+**不使用索引：**
+
+```mysql
+select * from t1 straight_join t2 on (t1.a=t2.b);
+```
+
+对应的算法为Block Nested-Loop Join
+
+1. 把t1的所有的数据读入到线程内存join_buffer当中，由于为select *,因此放入所有的字段，
+2. 扫描表t2，取出t2的每一行，在于join_buffer中的数据进行对比
+
+扫描次数为M*N次，但是为内存级，比不使用join_Buffer直接访问磁盘性能要好
+
+两个表都做一次全表扫描，所以总的扫描行数是 M+N；内存中的判断次数是 M*N。
+
+如果join_buffer无法放下t1的所有行，则分段进行，先放入一部分，然后查询t2，之后清空join_buffer再继续放入,判断的总行数不变，但是由于t2表涉及多次与join_buffer进行比较，因此扫描的行数为N+K*M,K为分段数
+
+**选择**
+
+- 如果是 Index Nested-Loop Join 算法，应该选择小表做驱动表；
+- 如果是 Block Nested-Loop Join 算法：
+  - 在 join_buffer_size 足够大的时候，是一样的；
+  - 在 join_buffer_size 不够大的时候（这种情况更常见），应该选择小表做驱动表。
+
+小表：查询出的字段较少，行较少的表，总数据量为字段*行数，总数量较小的为小表
+
+### Join优化
+
+**Multi-Range Read**
+
+主要思想为将随机读盘优化为顺序读盘
+
+```mysql
+select * from t1 where a>=1 and a<=100;
+```
+
+其中，a为唯一索引，当a的顺序与主键索引不一致时，则回表的查询过程为随机访问，开销较大，优化思路为将其优化成顺序读盘
+
+具体过程：
+
+1. 根据索引a，定位到满足条件的行，将id放入read_rnd_buffer
+2. 将read_rnd_buffer中的id进行递增排序
+3. 在根据有序的id去回表查询，此时随机访问变为顺序访问，减小开销
+
+**Batched Key Access**
+
+在Join时，为一行行的从t1中获取数据再到t2中比对，此时便无法再使用MRR进行优化
+
+解决方案为将t1中的数据查询先放到一个临时内存(Join_buffer)当中，之后便可以使用MRR进行优化
+
+```mysql
+select * from t1 join t2 on (t1.b=t2.b) where t2.b>=1 and t2.b<=2000;
+```
+
+1. 将t2中满足条件的行放入到临时表当中tmp_t
+2. 为使用BKA，给临时表的b加上索引(B+树搜索，join时无需遍历)
+3. t1和tmp_t进行join
+
+   ```mysql
+   create temporary table temp_t(id int primary key, a int, b int, index(b))engine=innodb;
+   insert into temp_t select * from t2 where b>=1 and b<=2000;
+   select * from t1 join temp_t on (t1.b=temp_t.b);
+   ```
+
+
+
+### 临时表
+
+**内存表/临时表**
+
+内存表指的是使用Memory引擎的表，数据保存在内存当中，而临时表只是表明表为临时的，存储的位置根据使用的引擎而定，二者之间并无直接的联系
+
+特性：
+
+- 建表语句：create temporary table
+- 之对于创建他的线程可见，其他线程不可见
+- 可以与普通表同名(存储时通过线程创建前缀)
+- 与同名的普通表存在时，CRUD访问的是临时表
+- show tables 不显示临时表
+- 发生异常断开或者正常关闭时会自动清理临时表
+
+**临时表存储**
+
+MySQL通过frm文件来保存表结构的定义，同时还有对应的保存表数据，因此这个 frm 文件放在临时文件目录下，文件名的后缀是.frm，前缀是“#sql{进程 id}\_{线程 id}\_ 序列号”,通过前缀即可与普通表区分出，因此可以与普通表重名
+
+- 在 5.6 以及之前的版本里，MySQL 会在临时文件目录下创建一个相同前缀、以.ibd 为后缀的文件，用来存放数据文件；
+- 而从 5.7 版本开始，MySQL 引入了一个临时文件表空间，专门用来存放临时文件的数据。因此，我们就不需要再创建 ibd 文件了。
+
+**主备复制**
+
+当binlog为row形式时，不存储临时表有关的操作，需要在statement/mix形式时，按照sql语句进行存储，才会记录有关临时表的相关操作
+
+```mysql
+insert into temp_t values(1,1);/*Q3*/
+insert into t_normal select * from temp_t;/*Q4*/
+```
+
+Q3Q4对应的row形式为write_row event里面记录的逻辑时插入一行数据(1,1)，未体现出临时表
+
+由于备库上执行日志为单线程，因此记录binlog时，会将主库中的线程一并写入到binlog当中，进行区分不同线程的临时表
+
+**使用场景**
+
+使用时机：处理复杂的逻辑计算，对查询结果先进行处理再返回给客户端，如group by，union等
+
+​	**union**
+
+union为两个查询的并集，因此使用临时表，对其进行一个取并集的操作，即先将第一个子查询的存入临时表，再将另外一个子查询的结果判重后插入到其中
+
+​	**group by**
+
+创建临时表和对应的字段，将查询到的结果放入到临时表中对应的分组下
+
+例：
+
+```mysql
+select id%10 as m, count(*) as c from t1 group by m 
+```
+
+group by 默认进行排序，如果想乱序，则`order by null`
+
+​	**group by 优化**
+
+索引：
+
+
+
+group by是统计不同的值出现的个数。但是，由于每一行的 id%10 的结果是无序的，所以我们就需要有一个临时表，来记录并统计结果。因此优化的方向便是令id%10处于一种有序的结果，共有两种思路：一是创建索引，二是通过SQL_BIG_RESULT指定进行filesort
+
+> 在 MySQL 5.7 版本支持了 generated column 机制，用来实现列数据的关联更新。你可以用下面的方法创建一个列 z，然后在 z 列上创建一个索引（如果是 MySQL 5.6 及之前的版本，你也可以创建普通列和索引，来解决这个问题）。
+>
+> ```mysql
+> alter table t1 add column z int generated always as(id % 100), add index(z);
+> 
+> select z, count(*) as c from t1 group by z;
+> ```
+
+直接排序：
+
+直接使用sort buffer进行排序，不再使用临时表，便按照sort_buffer的排序原则，使用filesort算法进行排序
+
+> 在 group by 语句中加入 SQL_BIG_RESULT 这个提示（hint），就可以告诉优化器：这个语句涉及的数据量很大。
+>
+> ```mysql
+> select SQL_BIG_RESULT id%100 as m, count(*) as c from t1 group by m;
+> ```
+>
+> 扫描表 t1 的索引 a，依次取出里面的 id 值, 将 id%100 的值存入 sort_buffer 中,排序后即可得到一个有序**数组**
+
